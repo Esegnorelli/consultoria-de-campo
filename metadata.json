@@ -1,0 +1,7 @@
+{
+  "name": "Checklist Operacional Hora do Pastel",
+  "description": "Aplicativo de checklist operacional e manutenção para unidades da Hora do Pastel, com suporte a fotos, banco de dados e geração de PDF.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
