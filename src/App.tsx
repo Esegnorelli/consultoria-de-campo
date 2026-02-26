@@ -52,21 +52,6 @@ export default function App() {
 
   const reportRef = useRef<HTMLDivElement>(null);
 
-  // Helper for IndexedDB
-  const getDB = () => {
-    return new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('ChecklistDB', 1);
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains('submissions')) {
-          db.createObjectStore('submissions', { keyPath: 'id' });
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  };
-
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       setError(event.message);
@@ -183,7 +168,6 @@ export default function App() {
     setIsSaving(true);
     try {
       const newSubmission = {
-        id: Date.now(),
         unit_name: unitName,
         inspector_name: inspectorName,
         date,
@@ -191,24 +175,19 @@ export default function App() {
         data: results
       };
 
-      const db = await getDB();
-      const tx = db.transaction('submissions', 'readwrite');
-      const store = tx.objectStore('submissions');
-      store.add(newSubmission);
-
-      await new Promise((resolve, reject) => {
-        tx.oncomplete = resolve;
-        tx.onerror = () => reject(tx.error);
+      const response = await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSubmission)
       });
+
+      if (!response.ok) throw new Error('Falha ao salvar no servidor');
 
       setShowSuccess(true);
       fetchSubmissions();
-      
-      // We removed the auto-download here to let the user choose in the success screen
-      // but we keep the success screen open until they decide or close it.
     } catch (error) {
       console.error('Save error:', error);
-      alert('Erro ao salvar checklist. O armazenamento pode estar cheio ou indisponível.');
+      alert('Erro ao salvar no banco de dados. Verifique sua conexão.');
     } finally {
       setIsSaving(false);
     }
@@ -216,16 +195,10 @@ export default function App() {
 
   const fetchSubmissions = async () => {
     try {
-      const db = await getDB();
-      const tx = db.transaction('submissions', 'readonly');
-      const store = tx.objectStore('submissions');
-      const request = store.getAll();
-
-      request.onsuccess = () => {
-        const data = request.result;
-        // Sort by date descending
-        setSubmissions(data.sort((a: any, b: any) => b.id - a.id));
-      };
+      const response = await fetch('/api/submissions');
+      if (!response.ok) throw new Error('Falha ao buscar dados');
+      const data = await response.json();
+      setSubmissions(data);
     } catch (error) {
       console.error('Fetch error:', error);
     }
