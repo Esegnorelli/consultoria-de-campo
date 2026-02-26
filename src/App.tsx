@@ -244,24 +244,25 @@ export default function App() {
         const element = elementsToCapture[i];
 
         const canvas = await html2canvas(element, {
-          scale: 2, // Good quality for small sections
+          scale: 1.5, // Balanced quality and memory
           useCORS: true,
           logging: false,
           backgroundColor: '#ffffff',
           width: element.offsetWidth,
           height: element.offsetHeight,
           onclone: (clonedDoc) => {
-            const el = clonedDoc.getElementById(element.id) || clonedDoc.querySelector(`.${element.className.split(' ').join('.')}`);
-            if (el instanceof HTMLElement) {
-              el.style.position = 'static';
-              el.style.visibility = 'visible';
-              el.style.display = 'block';
-              el.style.opacity = '1';
+            // Ensure the specific element and its container are visible in the clone
+            const reportContainer = clonedDoc.getElementById('report-container');
+            if (reportContainer) {
+              reportContainer.style.opacity = '1';
+              reportContainer.style.visibility = 'visible';
+              reportContainer.style.position = 'relative';
+              reportContainer.style.left = '0';
             }
           }
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        const imgData = canvas.toDataURL('image/jpeg', 0.7); // Slightly more compression
         const imgProps = pdf.getImageProperties(imgData);
         const imgHeight = (imgProps.height * (pdfWidth - 20)) / imgProps.width;
 
@@ -278,7 +279,7 @@ export default function App() {
       // Add Footer on last page
       const footer = document.getElementById('pdf-footer');
       if (footer) {
-        const canvas = await html2canvas(footer, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const canvas = await html2canvas(footer, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' });
         const imgData = canvas.toDataURL('image/jpeg', 0.8);
         const imgProps = pdf.getImageProperties(imgData);
         const imgHeight = (imgProps.height * (pdfWidth - 20)) / imgProps.width;
@@ -761,8 +762,8 @@ export default function App() {
       </main>
 
       {/* Hidden Report for PDF Generation - Optimized for Mobile Capture */}
-      <div style={{ position: 'absolute', top: '0', left: '-9999px', width: '800px', opacity: 0, pointerEvents: 'none' }}>
-        <div id="report-container" className="bg-white p-10 text-stone-900 font-sans" style={{ width: '800px' }}>
+      <div style={{ position: 'absolute', top: '0', left: '-9999px', width: '800px', opacity: 1, pointerEvents: 'none', visibility: 'visible' }}>
+        <div id="report-container" className="bg-white p-10 text-stone-900 font-sans" style={{ width: '800px', opacity: 1 }}>
           {/* Header */}
           <div id="pdf-header" className="flex justify-between items-center border-b-8 border-[#FF6B00] pb-6 mb-8">
             <div>
@@ -811,8 +812,8 @@ export default function App() {
               <>
                 {/* Non-Conforming Section (Priority) */}
                 {nonConforming.length > 0 && (
-                  <div className="mb-12">
-                    <div id="pdf-non-conforming-header" className="pdf-section bg-rose-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center shadow-lg shadow-rose-100">
+                  <div className="pdf-section mb-12">
+                    <div id="pdf-non-conforming-header" className="bg-rose-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center shadow-lg shadow-rose-100">
                       <h2 className="text-sm font-black uppercase tracking-widest">ITENS NÃO CONFORMES - REQUER ATENÇÃO</h2>
                       <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full">{nonConforming.length} Itens</span>
                     </div>
@@ -821,7 +822,7 @@ export default function App() {
                       {nonConforming.map((item, idx) => {
                         const res = results[item.id];
                         return (
-                          <div key={idx} className="pdf-section border-b-2 border-stone-100 pb-8 last:border-0">
+                          <div key={idx} className="border-b-2 border-stone-100 pb-8 last:border-0">
                             <div className="flex justify-between items-start gap-6 mb-4">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
