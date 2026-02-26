@@ -19,7 +19,6 @@ import { CHECKLIST_DATA } from './constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://zncxgpcqubsqrfqxmhhx.supabase.co";
@@ -94,7 +93,7 @@ export default function App() {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7)); // Compress to JPEG 70%
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
       };
     });
   };
@@ -215,81 +214,268 @@ export default function App() {
   };
 
   const generatePDF = async (action: 'download' | 'share' = 'download') => {
-    const reportContainer = document.getElementById('report-container');
-    if (!reportContainer) {
-      alert('Erro: Relatório não encontrado.');
-      return;
-    }
-
     setIsGeneratingPDF(true);
 
     try {
-      // Ensure rendering is stable
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - (margin * 2);
+      let y = margin;
 
-      // We'll capture the header first, then the sections
-      const elementsToCapture = [
-        document.getElementById('pdf-header'),
-        document.getElementById('pdf-info'),
-        ...Array.from(document.querySelectorAll('.pdf-section'))
-      ].filter(Boolean) as HTMLElement[];
+      const addNewPageIfNeeded = (neededHeight: number) => {
+        if (y + neededHeight > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+      };
 
-      let currentY = 10; // Margin top
-
-      for (let i = 0; i < elementsToCapture.length; i++) {
-        const element = elementsToCapture[i];
-
-        const canvas = await html2canvas(element, {
-          scale: 1.5, // Balanced quality and memory
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-          width: element.offsetWidth,
-          height: element.offsetHeight,
-          onclone: (clonedDoc) => {
-            // Ensure the specific element and its container are visible in the clone
-            const reportContainer = clonedDoc.getElementById('report-container');
-            if (reportContainer) {
-              reportContainer.style.opacity = '1';
-              reportContainer.style.visibility = 'visible';
-              reportContainer.style.position = 'relative';
-              reportContainer.style.left = '0';
-            }
-          }
+      const addText = (text: string, x: number, fontSize: number, style: 'normal' | 'bold' = 'normal', color: [number, number, number] = [0, 0, 0]) => {
+        pdf.setFontSize(fontSize);
+        pdf.setFont('helvetica', style);
+        pdf.setTextColor(...color);
+        
+        const lines = pdf.splitTextToSize(text, contentWidth - (x - margin));
+        const lineHeight = fontSize * 0.4;
+        
+        addNewPageIfNeeded(lines.length * lineHeight);
+        
+        lines.forEach((line: string, idx: number) => {
+          pdf.text(line, x, y + (idx * lineHeight));
         });
+        
+        return lines.length * lineHeight;
+      };
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.7); // Slightly more compression
-        const imgProps = pdf.getImageProperties(imgData);
-        const imgHeight = (imgProps.height * (pdfWidth - 20)) / imgProps.width;
+      const scoreColor: [number, number, number] = score >= 8 ? [16, 185, 129] : score >= 5 ? [245, 158, 11] : [244, 63, 94];
 
-        // Check if we need a new page
-        if (currentY + imgHeight > pdfHeight - 10) {
-          pdf.addPage();
-          currentY = 10;
+      pdf.setFillColor(255, 107, 0);
+      pdf.rect(0, 0, pageWidth, 8, 'F');
+
+      y = 20;
+      pdf.setTextColor(255, 107, 0);
+      pdf.setFontSize(24);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('HORA DO PASTEL', margin, y);
+
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(100, 100, 100);
+      pdf.text('RELATORIO TECNICO DE AUDITORIA OPERACIONAL', margin, y + 7);
+
+      pdf.setFillColor(240, 240, 240);
+      pdf.roundedRect(pageWidth - margin - 40, 18, 40, 20, 3, 3, 'F');
+      pdf.setFontSize(8);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text('SCORE FINAL', pageWidth - margin - 35, 24);
+      pdf.setFontSize(16);
+      pdf.setTextColor(...scoreColor);
+      pdf.text(score.toFixed(1), pageWidth - margin - 25, 33);
+
+      y = 48;
+      pdf.setDrawColor(230, 230, 230);
+      pdf.line(margin, y, pageWidth - margin, y);
+
+      y = 58;
+      const drawInfoBox = (label: string, value: string, x: number, boxWidth: number, boxY: number) => {
+        pdf.setDrawColor(230, 230, 230);
+        pdf.roundedRect(x, boxY, boxWidth, 18, 2, 2, 'S');
+        
+        pdf.setFontSize(7);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(label.toUpperCase(), x + 4, boxY + 6);
+        
+        pdf.setFontSize(10);
+        pdf.setTextColor(50, 50, 50);
+        pdf.setFont('helvetica', 'bold');
+        const truncatedValue = value.length > 25 ? value.substring(0, 25) + '...' : value;
+        pdf.text(truncatedValue, x + 4, boxY + 14);
+        pdf.setFont('helvetica', 'normal');
+      };
+
+      const boxWidth = (contentWidth - 10) / 2;
+      const row1Y = y;
+      const row2Y = y + 24;
+      
+      drawInfoBox('Unidade Auditada', unitName || 'N/A', margin, boxWidth, row1Y);
+      drawInfoBox('Data da Auditoria', new Date(date).toLocaleDateString('pt-BR'), margin + boxWidth + 10, boxWidth, row1Y);
+      drawInfoBox('Auditor Responsavel', inspectorName || 'N/A', margin, boxWidth, row2Y);
+      
+      const statusText = score >= 8 ? 'APROVADO' : 'NECESSITA ATENCAO';
+      const statusColor: [number, number, number] = score >= 8 ? [16, 185, 129] : [244, 63, 94];
+      pdf.setDrawColor(230, 230, 230);
+      pdf.roundedRect(margin + boxWidth + 10, row2Y, boxWidth, 18, 2, 2, 'S');
+      pdf.setFontSize(7);
+      pdf.setTextColor(150, 150, 150);
+      pdf.text('STATUS GERAL', margin + boxWidth + 14, row2Y + 6);
+      pdf.setFontSize(10);
+      pdf.setTextColor(...statusColor);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(statusText, margin + boxWidth + 14, row2Y + 14);
+      pdf.setFont('helvetica', 'normal');
+
+      y = row2Y + 30;
+
+      const allItems = CHECKLIST_DATA.flatMap(s => s.items.map(i => ({ ...i, sectionTitle: s.title })));
+      const nonConforming = allItems.filter(i => results[i.id]?.status === 'nao-conforme');
+      const conforming = allItems.filter(i => results[i.id]?.status === 'conforme');
+      const notEvaluated = allItems.filter(i => !results[i.id]?.status);
+
+      if (nonConforming.length > 0) {
+        addNewPageIfNeeded(25);
+        
+        pdf.setFillColor(244, 63, 94);
+        pdf.roundedRect(margin, y, contentWidth, 12, 2, 2, 'F');
+        pdf.setFontSize(10);
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('ITENS NAO CONFORMES - REQUER ATENCAO', margin + 5, y + 8);
+        pdf.text(`${nonConforming.length}`, pageWidth - margin - 10, y + 8, { align: 'right' });
+        pdf.setFont('helvetica', 'normal');
+        
+        y += 18;
+
+        for (const item of nonConforming) {
+          const res = results[item.id];
+          
+          addNewPageIfNeeded(30);
+          
+          pdf.setFillColor(255, 240, 240);
+          pdf.roundedRect(margin, y, contentWidth, 8, 1, 1, 'F');
+          pdf.setFontSize(7);
+          pdf.setTextColor(150, 150, 150);
+          pdf.text(item.sectionTitle.toUpperCase(), margin + 3, y + 5);
+          
+          y += 10;
+          
+          pdf.setFontSize(9);
+          pdf.setTextColor(244, 63, 94);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`#${item.id}`, margin, y + 4);
+          pdf.setTextColor(50, 50, 50);
+          pdf.text(item.question.substring(0, 80) + (item.question.length > 80 ? '...' : ''), margin + 12, y + 4);
+          pdf.setFont('helvetica', 'normal');
+          
+          pdf.setFillColor(255, 240, 240);
+          pdf.roundedRect(pageWidth - margin - 25, y - 1, 25, 6, 1, 1, 'F');
+          pdf.setFontSize(6);
+          pdf.setTextColor(244, 63, 94);
+          pdf.text('NAO CONFORME', pageWidth - margin - 22, y + 3);
+          
+          y += 8;
+
+          if (res?.observation) {
+            pdf.setFillColor(255, 250, 240);
+            pdf.roundedRect(margin, y, contentWidth, 12, 1, 1, 'F');
+            pdf.setFontSize(7);
+            pdf.setTextColor(245, 158, 11);
+            pdf.text('OBSERVACOES:', margin + 3, y + 4);
+            pdf.setTextColor(80, 80, 80);
+            const obsLines = pdf.splitTextToSize(`"${res.observation}"`, contentWidth - 8);
+            pdf.text(obsLines.slice(0, 2), margin + 3, y + 9);
+            y += 15;
+          }
+
+          if (res?.photos && res.photos.length > 0) {
+            const photoSize = 25;
+            const photoSpacing = 5;
+            let photoX = margin;
+            
+            for (let i = 0; i < Math.min(res.photos.length, 3); i++) {
+              try {
+                pdf.addImage(res.photos[i], 'JPEG', photoX, y, photoSize, photoSize, undefined, 'FAST');
+                pdf.setDrawColor(200, 200, 200);
+                pdf.rect(photoX, y, photoSize, photoSize, 'S');
+              } catch (e) {
+                console.error('Erro ao adicionar foto:', e);
+              }
+              photoX += photoSize + photoSpacing;
+            }
+            y += photoSize + 5;
+          }
+
+          y += 8;
         }
-
-        pdf.addImage(imgData, 'JPEG', 10, currentY, pdfWidth - 20, imgHeight);
-        currentY += imgHeight + 5; // Spacing between sections
       }
 
-      // Add Footer on last page
-      const footer = document.getElementById('pdf-footer');
-      if (footer) {
-        const canvas = await html2canvas(footer, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' });
-        const imgData = canvas.toDataURL('image/jpeg', 0.8);
-        const imgProps = pdf.getImageProperties(imgData);
-        const imgHeight = (imgProps.height * (pdfWidth - 20)) / imgProps.width;
+      if (conforming.length > 0) {
+        addNewPageIfNeeded(25);
+        
+        pdf.setFillColor(16, 185, 129);
+        pdf.roundedRect(margin, y, contentWidth, 12, 2, 2, 'F');
+        pdf.setFontSize(10);
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('ITENS EM CONFORMIDADE', margin + 5, y + 8);
+        pdf.text(`${conforming.length}`, pageWidth - margin - 10, y + 8, { align: 'right' });
+        pdf.setFont('helvetica', 'normal');
+        
+        y += 18;
 
-        if (currentY + imgHeight > pdfHeight - 10) {
-          pdf.addPage();
-          currentY = 10;
+        for (const item of conforming) {
+          addNewPageIfNeeded(8);
+          
+          pdf.setFontSize(8);
+          pdf.setTextColor(50, 50, 50);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`${item.id}`, margin, y + 4);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setTextColor(80, 80, 80);
+          const questionText = item.question.length > 70 ? item.question.substring(0, 70) + '...' : item.question;
+          pdf.text(questionText, margin + 10, y + 4);
+          
+          pdf.setFillColor(240, 253, 244);
+          pdf.roundedRect(pageWidth - margin - 15, y, 15, 5, 1, 1, 'F');
+          pdf.setFontSize(6);
+          pdf.setTextColor(16, 185, 129);
+          pdf.text('OK', pageWidth - margin - 11, y + 3.5);
+          
+          y += 8;
         }
-        pdf.addImage(imgData, 'JPEG', 10, currentY, pdfWidth - 20, imgHeight);
       }
+
+      if (notEvaluated.length > 0) {
+        addNewPageIfNeeded(25);
+        
+        pdf.setFillColor(150, 150, 150);
+        pdf.roundedRect(margin, y, contentWidth, 12, 2, 2, 'F');
+        pdf.setFontSize(10);
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('ITENS NAO AVALIADOS', margin + 5, y + 8);
+        pdf.text(`${notEvaluated.length}`, pageWidth - margin - 10, y + 8, { align: 'right' });
+        pdf.setFont('helvetica', 'normal');
+        
+        y += 18;
+
+        for (const item of notEvaluated) {
+          addNewPageIfNeeded(8);
+          
+          pdf.setFontSize(8);
+          pdf.setTextColor(100, 100, 100);
+          pdf.text(`${item.id}`, margin, y + 4);
+          const questionText = item.question.length > 70 ? item.question.substring(0, 70) + '...' : item.question;
+          pdf.text(questionText, margin + 10, y + 4);
+          
+          y += 8;
+        }
+      }
+
+      addNewPageIfNeeded(30);
+      y = Math.max(y + 10, pageHeight - 30);
+      
+      pdf.setDrawColor(230, 230, 230);
+      pdf.line(margin, y, pageWidth - margin, y);
+      
+      y += 10;
+      pdf.setFontSize(7);
+      pdf.setTextColor(180, 180, 180);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('RELATORIO GERADO ELETRONICAMENTE VIA SISTEMA DE AUDITORIA HORA DO PASTEL', pageWidth / 2, y, { align: 'center' });
+      y += 5;
+      pdf.setFontSize(6);
+      pdf.text(`ID do Documento: ${Date.now()} | Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, y, { align: 'center' });
 
       const safeUnitName = (unitName || 'AUDITORIA').toUpperCase().replace(/\s+/g, '_');
       const fileName = `AUDITORIA_${safeUnitName}_${date}.pdf`;
@@ -301,8 +487,8 @@ export default function App() {
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
-            title: 'Relatório de Auditoria',
-            text: `Relatório da unidade ${unitName}`,
+            title: 'Relatorio de Auditoria',
+            text: `Relatorio da unidade ${unitName}`,
           });
         } else {
           pdf.save(fileName);
@@ -312,7 +498,7 @@ export default function App() {
       }
     } catch (err) {
       console.error('PDF Error:', err);
-      alert('Erro ao gerar o PDF. Tente novamente ou reduza o número de fotos.');
+      alert('Erro ao gerar o PDF. Tente novamente.');
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -336,7 +522,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A] font-sans pb-28">
-      {/* Premium Header */}
       <header className="bg-white border-b border-stone-200 sticky top-0 z-40 px-4 md:px-6 py-3 md:py-4">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3 md:gap-4">
@@ -375,7 +560,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Progress Bar (Sticky) */}
       {step === 'checklist' && (
         <div className="sticky top-[73px] z-30 bg-white/80 backdrop-blur-md border-b border-stone-100">
           <div className="h-1.5 bg-stone-100 w-full overflow-hidden">
@@ -423,7 +607,7 @@ export default function App() {
                   onClick={() => { setShowSuccess(false); setStep('history'); }}
                   className="w-full py-4 bg-stone-100 text-stone-600 font-bold rounded-2xl"
                 >
-                  Ir para o Histórico
+                  Ir para o Historico
                 </button>
               </div>
             </div>
@@ -434,8 +618,8 @@ export default function App() {
           <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-3xl md:rounded-[32px] p-6 md:p-8 shadow-xl shadow-stone-200/50 border border-stone-100">
               <div className="mb-6 md:mb-8">
-                <h2 className="text-2xl md:text-3xl font-bold text-stone-900 tracking-tight">Nova Inspeção</h2>
-                <p className="text-sm md:text-base text-stone-500 mt-1">Preencha os dados da unidade para começar.</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-stone-900 tracking-tight">Nova Inspecao</h2>
+                <p className="text-sm md:text-base text-stone-500 mt-1">Preencha os dados da unidade para comecar.</p>
               </div>
 
               <div className="space-y-5 md:space-y-6">
@@ -451,7 +635,7 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1.5 md:space-y-2">
-                  <label className="text-[10px] md:text-xs font-bold text-stone-400 uppercase ml-1">Responsável pela Auditoria</label>
+                  <label className="text-[10px] md:text-xs font-bold text-stone-400 uppercase ml-1">Responsavel pela Auditoria</label>
                   <input
                     type="text"
                     value={inspectorName}
@@ -485,10 +669,9 @@ export default function App() {
 
         {step === 'checklist' && (
           <div className="space-y-6 md:space-y-8">
-            {/* Section Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-2">
               <div>
-                <span className="text-[8px] md:text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] mb-1 block">Seção Atual</span>
+                <span className="text-[8px] md:text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] mb-1 block">Secao Atual</span>
                 <h2 className="text-xl md:text-3xl font-black text-stone-900 leading-tight">{currentSection.title}</h2>
               </div>
               <div className="flex items-center justify-between md:justify-end gap-3">
@@ -526,7 +709,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Checklist Items */}
             <div className="grid gap-4 md:gap-6">
               {currentSection.items.map((item) => (
                 <div key={item.id} className="bg-white rounded-2xl md:rounded-[32px] p-5 md:p-8 border border-stone-100 shadow-sm hover:shadow-md transition-all group">
@@ -564,18 +746,18 @@ export default function App() {
                         >
                           <XCircle size={16} className="md:hidden" />
                           <XCircle size={18} className="hidden md:block" />
-                          NÃO CONFORME
+                          NAO CONFORME
                         </button>
                       </div>
                     </div>
 
                     <div className="w-full md:w-72 space-y-4">
                       <div className="space-y-2">
-                        <label className="text-[9px] md:text-[10px] font-black text-stone-400 uppercase tracking-widest ml-1">Evidências (Máx 3)</label>
+                        <label className="text-[9px] md:text-[10px] font-black text-stone-400 uppercase tracking-widest ml-1">Evidencias (Max 3)</label>
                         <div className="flex gap-2">
                           {results[item.id]?.photos?.map((photo, idx) => (
                             <div key={idx} className="relative w-14 h-14 md:w-16 md:h-16 rounded-lg md:rounded-xl overflow-hidden border border-stone-200 group/photo">
-                              <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
+                              <img src={photo} alt="Evidencia" className="w-full h-full object-cover" />
                               <button
                                 onClick={() => removePhoto(item.id, idx)}
                                 className="absolute inset-0 bg-rose-500/80 text-white flex items-center justify-center opacity-0 group-hover/photo:opacity-100 transition-opacity"
@@ -601,7 +783,7 @@ export default function App() {
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-[9px] md:text-[10px] font-black text-stone-400 uppercase tracking-widest ml-1">Observações</label>
+                        <label className="text-[9px] md:text-[10px] font-black text-stone-400 uppercase tracking-widest ml-1">Observacoes</label>
                         <textarea
                           placeholder="Descreva detalhes..."
                           value={results[item.id]?.observation || ''}
@@ -615,7 +797,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* Summary Card before finishing */}
             {currentSectionIndex === CHECKLIST_DATA.length - 1 && answeredItemsCount === totalItemsCount && (
               <div className="bg-orange-50 border-2 border-orange-200 rounded-2xl md:rounded-[32px] p-6 md:p-8 text-center">
                 <div className="w-14 h-14 md:w-16 md:h-16 bg-orange-500 text-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-orange-200">
@@ -627,7 +808,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Footer Actions */}
             <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-6 md:pt-10 pb-16 md:pb-20">
               <button
                 onClick={() => {
@@ -652,7 +832,7 @@ export default function App() {
                   }}
                   className="w-full md:flex-[2] py-4 md:py-5 bg-[#1A1A1A] text-white font-black rounded-xl md:rounded-[24px] hover:bg-stone-800 transition-all shadow-xl shadow-stone-200 flex items-center justify-center gap-2 md:gap-3 text-sm md:text-base"
                 >
-                  PRÓXIMA ETAPA
+                  PROXIMA ETAPA
                   <ChevronRight size={22} />
                 </button>
               ) : (
@@ -674,8 +854,8 @@ export default function App() {
           <div className="max-w-3xl mx-auto space-y-5 md:space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-8">
               <div>
-                <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tight">Histórico</h2>
-                <p className="text-sm md:text-base text-stone-500">Relatórios de auditorias anteriores.</p>
+                <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tight">Historico</h2>
+                <p className="text-sm md:text-base text-stone-500">Relatorios de auditorias anteriores.</p>
               </div>
               <button
                 onClick={() => setStep('info')}
@@ -761,161 +941,15 @@ export default function App() {
         )}
       </main>
 
-      {/* Hidden Report for PDF Generation - Optimized for Mobile Capture */}
-      <div style={{ position: 'absolute', top: '0', left: '-9999px', width: '800px', opacity: 1, pointerEvents: 'none', visibility: 'visible' }}>
-        <div id="report-container" className="bg-white p-10 text-stone-900 font-sans" style={{ width: '800px', opacity: 1 }}>
-          {/* Header */}
-          <div id="pdf-header" className="flex justify-between items-center border-b-8 border-[#FF6B00] pb-6 mb-8">
-            <div>
-              <h1 className="text-4xl font-black text-[#FF6B00] tracking-tighter">HORA DO PASTEL</h1>
-              <p className="text-sm font-bold text-stone-500 uppercase tracking-[0.2em]">Relatório Técnico de Auditoria Operacional</p>
-            </div>
-            <div className="bg-stone-100 p-4 rounded-2xl text-center min-w-[120px]">
-              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Score Final</p>
-              <p className={cn(
-                "text-3xl font-black",
-                score >= 8 ? "text-emerald-600" : score >= 5 ? "text-amber-600" : "text-rose-600"
-              )}>{score.toFixed(1)}</p>
-            </div>
-          </div>
-
-          {/* Info Grid */}
-          <div id="pdf-info" className="grid grid-cols-2 gap-4 mb-8">
-            <div className="border-2 border-stone-100 p-4 rounded-2xl">
-              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Unidade Auditada</p>
-              <p className="text-lg font-bold text-stone-800">{unitName || 'N/A'}</p>
-            </div>
-            <div className="border-2 border-stone-100 p-4 rounded-2xl">
-              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Data da Auditoria</p>
-              <p className="text-lg font-bold text-stone-800">{new Date(date).toLocaleDateString('pt-BR')}</p>
-            </div>
-            <div className="border-2 border-stone-100 p-4 rounded-2xl">
-              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Auditor Responsável</p>
-              <p className="text-lg font-bold text-stone-800">{inspectorName || 'N/A'}</p>
-            </div>
-            <div className="border-2 border-stone-100 p-4 rounded-2xl">
-              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Status Geral</p>
-              <p className={cn(
-                "text-lg font-bold",
-                score >= 8 ? "text-emerald-600" : "text-rose-600"
-              )}>{score >= 8 ? 'APROVADO' : 'NECESSITA ATENÇÃO'}</p>
-            </div>
-          </div>
-
-          {/* Checklist Sections - Reordered for Audit Priority */}
-          {(() => {
-            const allItems = CHECKLIST_DATA.flatMap(s => s.items.map(i => ({ ...i, sectionTitle: s.title })));
-            const nonConforming = allItems.filter(i => results[i.id]?.status === 'nao-conforme');
-            const conforming = allItems.filter(i => results[i.id]?.status === 'conforme');
-
-            return (
-              <>
-                {/* Non-Conforming Section (Priority) */}
-                {nonConforming.length > 0 && (
-                  <div className="pdf-section mb-12">
-                    <div id="pdf-non-conforming-header" className="bg-rose-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center shadow-lg shadow-rose-100">
-                      <h2 className="text-sm font-black uppercase tracking-widest">ITENS NÃO CONFORMES - REQUER ATENÇÃO</h2>
-                      <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full">{nonConforming.length} Itens</span>
-                    </div>
-
-                    <div className="space-y-8">
-                      {nonConforming.map((item, idx) => {
-                        const res = results[item.id];
-                        return (
-                          <div key={idx} className="border-b-2 border-stone-100 pb-8 last:border-0">
-                            <div className="flex justify-between items-start gap-6 mb-4">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-[8px] font-black bg-stone-100 text-stone-400 px-2 py-0.5 rounded uppercase tracking-widest">
-                                    {item.sectionTitle}
-                                  </span>
-                                </div>
-                                <p className="text-base font-bold text-stone-800">
-                                  <span className="text-rose-500 mr-2">#{item.id}</span>
-                                  {item.question}
-                                </p>
-                              </div>
-                              <div className="px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest shrink-0 bg-rose-50 text-rose-600 border border-rose-100">
-                                Não Conforme
-                              </div>
-                            </div>
-
-                            {res.observation && (
-                              <div className="bg-amber-50/50 border-l-4 border-amber-200 p-4 rounded-r-xl mb-4">
-                                <p className="text-[9px] font-black text-amber-500 uppercase mb-1">Observações do Auditor</p>
-                                <p className="text-sm text-stone-700 italic">"{res.observation}"</p>
-                              </div>
-                            )}
-
-                            {res.photos.length > 0 && (
-                              <div className="grid grid-cols-3 gap-3">
-                                {res.photos.map((photo, pIdx) => (
-                                  <div key={pIdx} className="aspect-square rounded-xl overflow-hidden border-2 border-stone-100">
-                                    <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Conforming Section */}
-                {conforming.length > 0 && (
-                  <div className="mb-10">
-                    <div id="pdf-conforming-header" className="pdf-section bg-emerald-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center">
-                      <h2 className="text-sm font-black uppercase tracking-widest">ITENS EM CONFORMIDADE</h2>
-                      <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full">{conforming.length} Itens</span>
-                    </div>
-
-                    <div className="space-y-6">
-                      {/* Group conforming items in chunks of 10 to keep sections small */}
-                      {Array.from({ length: Math.ceil(conforming.length / 10) }).map((_, chunkIdx) => (
-                        <div key={chunkIdx} className="pdf-section">
-                          {conforming.slice(chunkIdx * 10, (chunkIdx + 1) * 10).map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center py-3 border-b border-stone-50 last:border-0">
-                              <div className="flex-1 pr-4">
-                                <p className="text-sm font-medium text-stone-600">
-                                  <span className="text-stone-300 mr-2 font-bold">{item.id}</span>
-                                  {item.question}
-                                </p>
-                                <span className="text-[8px] text-stone-300 uppercase font-bold tracking-tighter">{item.sectionTitle}</span>
-                              </div>
-                              <div className="px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600">
-                                OK
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })()}
-
-          {/* Footer */}
-          <div id="pdf-footer" className="mt-20 pt-10 border-t-2 border-stone-100 text-center">
-            <p className="text-[10px] font-black text-stone-300 uppercase tracking-[0.5em] mb-2">Relatório Gerado Eletronicamente via Sistema de Auditoria Hora do Pastel</p>
-            <p className="text-[8px] text-stone-300">ID do Documento: {Date.now()}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* PDF Generation Loading Overlay */}
       {isGeneratingPDF && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-[32px] p-8 max-w-sm w-full text-center shadow-2xl animate-in fade-in zoom-in duration-300">
             <div className="w-20 h-20 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-200">
               <Loader2 size={40} className="text-white animate-spin" />
             </div>
-            <h3 className="text-xl font-black text-stone-800 mb-2">Gerando Relatório</h3>
+            <h3 className="text-xl font-black text-stone-800 mb-2">Gerando Relatorio</h3>
             <p className="text-stone-500 font-bold text-sm leading-relaxed">
-              Estamos processando os dados e imagens. Isso pode levar alguns segundos...
+              Estamos processando os dados. Isso pode levar alguns segundos...
             </p>
             <div className="mt-6 h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
               <div className="h-full bg-orange-500 animate-progress w-full origin-left"></div>
@@ -924,7 +958,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Modern Bottom Nav */}
       <nav className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 bg-[#1A1A1A] text-white px-6 md:px-8 py-3 md:py-4 rounded-3xl md:rounded-[32px] flex items-center gap-8 md:gap-12 z-50 shadow-2xl shadow-stone-900/20 border border-white/10 w-[90%] md:w-auto justify-center">
         <button
           onClick={() => setStep('info')}
