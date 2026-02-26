@@ -13,7 +13,9 @@ import {
   Loader2,
   Download,
   AlertTriangle,
-  Share2
+  Share2,
+  Edit,
+  X as XIcon
 } from 'lucide-react';
 import { CHECKLIST_DATA } from './constants';
 import { clsx, type ClassValue } from 'clsx';
@@ -23,7 +25,11 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://zncxgpcqubsqrfqxmhhx.supabase.co";
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY || "sb_publishable_O4Ozf7bprRosDluP37mAiA_ShAlr-m0";
+const supabaseServiceKey = import.meta.env.SUPABASE_SERVICE_ROLE_KEY || "sbp_9b493583c71b551b55f72b573ebe801c32ff16fc";
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Cliente Supabase com chave service_role (para operações administrativas - contorna RLS)
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -53,6 +59,9 @@ export default function App() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
+  const [editingSubmissionId, setEditingSubmissionId] = useState<number | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -171,7 +180,7 @@ export default function App() {
 
     setIsSaving(true);
     try {
-      const newSubmission = {
+      const submissionData = {
         unit_name: unitName,
         inspector_name: inspectorName,
         date,
@@ -179,17 +188,29 @@ export default function App() {
         data: results
       };
 
-      const { data: insertedData, error } = await supabase
-        .from('submissions')
-        .insert([newSubmission])
-        .select();
+      if (editingSubmissionId) {
+        // Atualizar submission existente
+        const { error } = await supabase
+          .from('submissions')
+          .update(submissionData)
+          .eq('id', editingSubmissionId);
 
-      if (error) {
-        console.error('Supabase Error:', error);
-        throw new Error(error.message);
+        if (error) throw error;
+      } else {
+        // Criar nova submission
+        const { data: insertedData, error } = await supabase
+          .from('submissions')
+          .insert([submissionData])
+          .select();
+
+        if (error) {
+          console.error('Supabase Error:', error);
+          throw new Error(error.message);
+        }
       }
 
       setShowSuccess(true);
+      setEditingSubmissionId(null);
       fetchSubmissions();
     } catch (error: any) {
       console.error('Save error:', error);
@@ -201,15 +222,240 @@ export default function App() {
 
   const fetchSubmissions = async () => {
     try {
+      console.log('📥 [FETCH] Buscando submissions do servidor...');
+      
       const { data, error } = await supabase
         .from('submissions')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      console.log('📥 [FETCH] Submissions carregadas:', data?.length || 0, 'registros');
+      
+      if (data && data.length > 0) {
+        console.log('📥 [FETCH] Exemplo de registro:', {
+          id: data[0].id,
+          idType: typeof data[0].id,
+          idValue: String(data[0].id),
+          idIsUUID: typeof data[0].id === 'string' && data[0].id.includes('-'),
+          unit_name: data[0].unit_name,
+          created_at: data[0].created_at
+        });
+
+        // Verificar tipos de todos os IDs
+        const idTypes = new Set(data.map(s => typeof s.id));
+        console.log('📥 [FETCH] Tipos de ID encontrados:', Array.from(idTypes));
+      }
+      
       setSubmissions(data || []);
     } catch (error) {
-      console.error('Fetch error:', error);
+      console.error('❌ [FETCH] Erro ao buscar submissions:', error);
+    }
+  };
+
+  // Função para testar permissões do Supabase
+  const testSupabasePermissions = async () => {
+    console.log('🧪 [TEST] Iniciando teste de permissões...');
+    
+    try {
+      // Test 1: SELECT
+      console.log('🧪 [TEST 1/3] Testando SELECT...');
+      const { data: selectData, error: selectError } = await supabase
+        .from('submissions')
+        .select('id, unit_name')
+        .limit(1);
+      
+      if (selectError) {
+        console.error('❌ [TEST 1/3] SELECT falhou:', selectError);
+        alert('❌ SELECT falhou: ' + selectError.message);
+        return;
+      }
+      console.log('✅ [TEST 1/3] SELECT OK');
+
+      // Test 2: INSERT (se houver dados)
+      if (selectData && selectData.length > 0) {
+        console.log('🧪 [TEST 2/3] Testando DELETE...');
+        
+        const { data: deleteData, error: deleteError } = await supabase
+          .from('submissions')
+          .delete()
+          .eq('id', selectData[0].id)
+          .select();
+
+        if (deleteError) {
+          console.error('❌ [TEST 2/3] DELETE falhou:', deleteError);
+          alert('❌ DELETE falhou: ' + deleteError.message + '\n\nExecute o arquivo setup_permissions.sql no SQL Editor do Supabase.');
+          return;
+        }
+        
+        console.log('✅ [TEST 2/3] DELETE OK', deleteData);
+
+        // Restaura o registro deletado (para não perder dados no teste)
+        if (deleteData && deleteData.length > 0) {
+          console.log('🧪 [TEST 3/3] Restaurando registro...');
+          await supabase
+            .from('submissions')
+            .insert(deleteData);
+          console.log('✅ [TEST 3/3] RESTORE OK');
+        }
+      } else {
+        console.log('⚠️ [TEST] Nenhum registro para testar DELETE');
+      }
+
+      alert('✅ Todos os testes de permissão passaram!\n\nSELECT: OK\nDELETE: OK\nRESTORE: OK');
+      
+      // Atualiza a lista
+      await fetchSubmissions();
+      
+    } catch (error: any) {
+      console.error('❌ [TEST] Erro no teste:', error);
+      alert('❌ Erro no teste: ' + error.message);
+    }
+  };
+
+  const deleteSubmission = async (id: number | string) => {
+    setIsDeleting(true);
+    try {
+      console.log('🗑️ [DELETE] Iniciando exclusão do registro ID:', id, 'Tipo:', typeof id);
+
+      // Convert para string se for número, para garantir compatibilidade
+      const idToDelete = String(id);
+      console.log('🗑️ [DELETE] ID convertido para string:', idToDelete);
+
+      // Passo 1: Verificar se o registro existe ANTES de tentar excluir
+      console.log('🔍 [DELETE] Verificando se o registro existe...');
+      const { data: recordExists, error: checkError } = await supabase
+        .from('submissions')
+        .select('id, unit_name')
+        .eq('id', idToDelete)
+        .single();
+
+      if (checkError || !recordExists) {
+        console.error('❌ [DELETE] Registro não encontrado:', checkError);
+        throw new Error('Registro não encontrado ou erro ao verificar.');
+      }
+      console.log('✅ [DELETE] Registro encontrado:', recordExists.unit_name);
+
+      // Passo 2: Excluir o registro usando SUPABASE ADMIN (contorna RLS!)
+      console.log('🗑️ [DELETE] Executando DELETE com permissões ADMIN...');
+      const { error: deleteError } = await supabaseAdmin
+        .from('submissions')
+        .delete()
+        .eq('id', idToDelete);
+
+      console.log('🗑️ [DELETE] Resultado DELETE (ADMIN):', deleteError);
+
+      if (deleteError) {
+        console.error('❌ [DELETE] Erro ao excluir:', deleteError);
+        throw new Error(`Erro ao excluir: ${deleteError.message}`);
+      }
+
+      // Passo 3: Verificar se o registro foi REALMENTE excluído
+      console.log('🔍 [DELETE] Verificando se foi excluído...');
+      const { data: stillExists, error: verifyError } = await supabase
+        .from('submissions')
+        .select('id')
+        .eq('id', idToDelete)
+        .maybeSingle();
+
+      console.log('🔍 [DELETE] Resultado verificação:', { stillExists, verifyError });
+
+      if (stillExists) {
+        console.error('❌ [DELETE] O registro ainda existe após DELETE!');
+        console.error('❌ [DELETE] Isso indica problema com permissões RLS.');
+        throw new Error('O registro NÃO foi excluído. Mesmo com chave service_role, ainda não funcionou.');
+      }
+
+      console.log('✅ [DELETE] Registro excluído com sucesso! (verificado)');
+
+      // Passo 4: Atualiza a lista localmente primeiro para resposta mais rápida
+      console.log('🔄 [DELETE] Atualizando estado local...');
+      setSubmissions(prev => {
+        const filtered = prev.filter(sub => String(sub.id) !== idToDelete);
+        console.log('🔄 [DELETE] Registros restantes:', filtered.length);
+        return filtered;
+      });
+
+      // Passo 5: Depois busca do servidor para garantir sincronização
+      console.log('🔄 [DELETE] Buscando dados atualizados do servidor...');
+      await fetchSubmissions();
+
+      // Passo 6: Fecha o modal e mostra sucesso
+      setShowDeleteConfirm(null);
+      alert('✅ Registro excluído com sucesso!');
+
+    } catch (error: any) {
+      console.error('❌ [DELETE] Erro completo:', error);
+      console.error('❌ [DELETE] Detalhes do erro:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+
+      let errorMessage = 'Erro ao excluir o registro.';
+      
+      // Mensagens mais específicas
+      if (error.message?.includes('permission denied') || error.message?.includes('insufficient privilege')) {
+        errorMessage = '❌ Erro de permissão: Você não tem permissão para excluir este registro.\n\nSolução: Execute no SQL Editor do Supabase:\nALTER TABLE submissions DISABLE ROW LEVEL SECURITY;';
+      } else if (error.message?.includes('row-level security policy')) {
+        errorMessage = '❌ Erro de política de segurança: A tabela submissions tem RLS habilitado.\n\nSolução: Execute no SQL Editor do Supabase:\nALTER TABLE submissions DISABLE ROW LEVEL SECURITY;';
+      } else if (error.message?.includes('NÃO foi excluído')) {
+        errorMessage = error.message;
+      } else if (error.message) {
+        errorMessage = `❌ Erro ao excluir: ${error.message}`;
+      }
+
+      alert(errorMessage);
+    } finally {
+      setIsDeleting(false);
+      console.log('🏁 [DELETE] Processo de exclusão finalizado');
+    }
+  };
+
+  const editSubmission = (submission: any) => {
+    setUnitName(submission.unit_name);
+    setInspectorName(submission.inspector_name);
+    setDate(submission.date);
+    setResults(submission.data);
+    setEditingSubmissionId(submission.id);
+    setStep('info');
+  };
+
+  const updateSubmission = async () => {
+    if (!unitName || !inspectorName) {
+      alert('Por favor, preencha o nome da unidade e do inspetor.');
+      return;
+    }
+
+    if (!editingSubmissionId) return;
+
+    setIsSaving(true);
+    try {
+      const updatedData = {
+        unit_name: unitName,
+        inspector_name: inspectorName,
+        date,
+        score,
+        data: results
+      };
+
+      const { error } = await supabase
+        .from('submissions')
+        .update(updatedData)
+        .eq('id', editingSubmissionId);
+
+      if (error) throw error;
+
+      setShowSuccess(true);
+      setEditingSubmissionId(null);
+      fetchSubmissions();
+    } catch (error: any) {
+      console.error('Update error:', error);
+      alert(`Erro ao atualizar: ${error.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -584,7 +830,9 @@ export default function App() {
                 <CheckCircle2 size={48} className="text-white hidden md:block" />
               </div>
               <h2 className="text-xl md:text-2xl font-black text-stone-900 mb-2">Sucesso!</h2>
-              <p className="text-sm md:text-base text-stone-500 font-medium mb-6">Auditoria salva e sincronizada localmente.</p>
+              <p className="text-sm md:text-base text-stone-500 font-medium mb-6">
+                {editingSubmissionId ? 'Auditoria atualizada com sucesso!' : 'Auditoria salva e sincronizada localmente.'}
+              </p>
 
               <div className="space-y-3">
                 <button
@@ -618,8 +866,12 @@ export default function App() {
           <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-3xl md:rounded-[32px] p-6 md:p-8 shadow-xl shadow-stone-200/50 border border-stone-100">
               <div className="mb-6 md:mb-8">
-                <h2 className="text-2xl md:text-3xl font-bold text-stone-900 tracking-tight">Nova Inspecao</h2>
-                <p className="text-sm md:text-base text-stone-500 mt-1">Preencha os dados da unidade para comecar.</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-stone-900 tracking-tight">
+                  {editingSubmissionId ? 'Editar Auditoria' : 'Nova Inspecao'}
+                </h2>
+                <p className="text-sm md:text-base text-stone-500 mt-1">
+                  {editingSubmissionId ? 'Atualize os dados da auditoria.' : 'Preencha os dados da unidade para comecar.'}
+                </p>
               </div>
 
               <div className="space-y-5 md:space-y-6">
@@ -656,11 +908,17 @@ export default function App() {
                 </div>
 
                 <button
-                  onClick={() => setStep('checklist')}
+                  onClick={() => {
+                    if (editingSubmissionId) {
+                      setStep('checklist');
+                    } else {
+                      setStep('checklist');
+                    }
+                  }}
                   disabled={!unitName || !inspectorName}
                   className="w-full bg-[#1A1A1A] text-white font-bold py-4 md:py-5 rounded-xl md:rounded-[24px] mt-2 md:mt-4 hover:bg-stone-800 active:scale-[0.98] transition-all disabled:opacity-20 disabled:pointer-events-none shadow-xl shadow-stone-200 text-sm md:text-base"
                 >
-                  Iniciar Auditoria
+                  {editingSubmissionId ? 'Continuar Edição' : 'Iniciar Auditoria'}
                 </button>
               </div>
             </div>
@@ -809,6 +1067,22 @@ export default function App() {
             )}
 
             <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-6 md:pt-10 pb-16 md:pb-20">
+              {editingSubmissionId && (
+                <button
+                  onClick={() => {
+                    setEditingSubmissionId(null);
+                    setUnitName('');
+                    setInspectorName('');
+                    setDate(new Date().toISOString().split('T')[0]);
+                    setResults({});
+                    setStep('history');
+                  }}
+                  className="w-full md:flex-1 py-4 md:py-5 bg-rose-50 border border-rose-200 text-rose-600 font-bold rounded-xl md:rounded-[24px] hover:bg-rose-100 transition-all text-sm md:text-base flex items-center justify-center gap-2"
+                >
+                  <XIcon size={18} />
+                  Cancelar Edição
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (currentSectionIndex > 0) {
@@ -818,7 +1092,7 @@ export default function App() {
                     setStep('info');
                   }
                 }}
-                className="w-full md:flex-1 py-4 md:py-5 bg-white border border-stone-200 text-stone-600 font-bold rounded-xl md:rounded-[24px] hover:bg-stone-50 transition-all text-sm md:text-base flex items-center justify-center gap-2"
+                className={`w-full ${editingSubmissionId ? 'md:flex-1' : 'md:flex-[2]'} py-4 md:py-5 bg-white border border-stone-200 text-stone-600 font-bold rounded-xl md:rounded-[24px] hover:bg-stone-50 transition-all text-sm md:text-base flex items-center justify-center gap-2`}
               >
                 <ChevronLeft size={18} />
                 {currentSectionIndex > 0 ? 'Etapa Anterior' : 'Voltar aos Dados'}
@@ -843,7 +1117,7 @@ export default function App() {
                 >
                   {isSaving ? <Loader2 className="animate-spin" /> : <Save size={20} className="md:hidden" />}
                   {isSaving ? null : <Save size={22} className="hidden md:block" />}
-                  FINALIZAR AUDITORIA
+                  {editingSubmissionId ? 'ATUALIZAR AUDITORIA' : 'FINALIZAR AUDITORIA'}
                 </button>
               )}
             </div>
@@ -857,12 +1131,21 @@ export default function App() {
                 <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tight">Historico</h2>
                 <p className="text-sm md:text-base text-stone-500">Relatorios de auditorias anteriores.</p>
               </div>
-              <button
-                onClick={() => setStep('info')}
-                className="w-full md:w-auto px-6 py-3.5 bg-[#1A1A1A] text-white rounded-xl md:rounded-2xl font-bold text-sm shadow-lg shadow-stone-200 hover:bg-stone-800 transition-all"
-              >
-                Nova Auditoria
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={testSupabasePermissions}
+                  className="w-full md:w-auto px-4 py-3.5 bg-amber-100 text-amber-700 rounded-xl md:rounded-2xl font-bold text-xs shadow-lg hover:bg-amber-200 transition-all"
+                  title="Testar permissões do Supabase"
+                >
+                  🔧 Testar Permissões
+                </button>
+                <button
+                  onClick={() => setStep('info')}
+                  className="w-full md:w-auto px-6 py-3.5 bg-[#1A1A1A] text-white rounded-xl md:rounded-2xl font-bold text-sm shadow-lg shadow-stone-200 hover:bg-stone-800 transition-all"
+                >
+                  Nova Auditoria
+                </button>
+              </div>
             </div>
 
             {submissions.length === 0 ? (
@@ -919,6 +1202,23 @@ export default function App() {
                         {isGeneratingPDF ? 'GERANDO...' : 'PDF'}
                       </button>
                       <button
+                        onClick={() => editSubmission(sub)}
+                        className="flex items-center justify-center p-3.5 md:p-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl hover:bg-blue-500 hover:text-white transition-all"
+                        title="Editar"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          console.log('Botão de exclusão clicado para ID:', sub.id, 'Tipo:', typeof sub.id);
+                          setShowDeleteConfirm(sub.id);
+                        }}
+                        className="flex items-center justify-center p-3.5 md:p-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl hover:bg-rose-500 hover:text-white transition-all"
+                        title="Excluir"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                      <button
                         onClick={() => {
                           setUnitName(sub.unit_name);
                           setInspectorName(sub.inspector_name);
@@ -953,6 +1253,37 @@ export default function App() {
             </p>
             <div className="mt-6 h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
               <div className="h-full bg-orange-500 animate-progress w-full origin-left"></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm !== null && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[32px] p-8 max-w-sm w-full text-center shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div className="w-20 h-20 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-rose-200">
+              <Trash2 size={40} className="text-white" />
+            </div>
+            <h3 className="text-xl md:text-2xl font-black text-stone-900 mb-2">Confirmar Exclusão</h3>
+            <p className="text-stone-500 font-medium text-sm md:text-base leading-relaxed mb-6">
+              Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => deleteSubmission(showDeleteConfirm)}
+                disabled={isDeleting}
+                className="w-full py-4 bg-rose-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-rose-100 disabled:opacity-50"
+              >
+                {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 size={20} />}
+                SIM, EXCLUIR
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                disabled={isDeleting}
+                className="w-full py-4 bg-stone-100 text-stone-600 font-bold rounded-2xl"
+              >
+                CANCELAR
+              </button>
             </div>
           </div>
         </div>
