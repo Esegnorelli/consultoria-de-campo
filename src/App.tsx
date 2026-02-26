@@ -1,12 +1,12 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { 
-  CheckCircle2, 
-  XCircle, 
-  Camera, 
-  FileText, 
-  Save, 
-  History, 
-  ChevronRight, 
+import {
+  CheckCircle2,
+  XCircle,
+  Camera,
+  FileText,
+  Save,
+  History,
+  ChevronRight,
   ChevronLeft,
   Trash2,
   Plus,
@@ -22,8 +22,8 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = "https://zncxgpcqubsqrfqxmhhx.supabase.co";
-const supabaseKey = "sb_publishable_O4Ozf7bprRosDluP37mAiA_ShAlr-m0";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://zncxgpcqubsqrfqxmhhx.supabase.co";
+const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY || "sb_publishable_O4Ozf7bprRosDluP37mAiA_ShAlr-m0";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 function cn(...inputs: ClassValue[]) {
@@ -220,9 +220,9 @@ export default function App() {
       alert('Erro: Relatório não encontrado.');
       return;
     }
-    
+
     setIsGeneratingPDF(true);
-    
+
     try {
       // Ensure rendering is stable
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -230,7 +230,7 @@ export default function App() {
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      
+
       // We'll capture the header first, then the sections
       const elementsToCapture = [
         document.getElementById('pdf-header'),
@@ -242,7 +242,7 @@ export default function App() {
 
       for (let i = 0; i < elementsToCapture.length; i++) {
         const element = elementsToCapture[i];
-        
+
         const canvas = await html2canvas(element, {
           scale: 2, // Good quality for small sections
           useCORS: true,
@@ -282,7 +282,7 @@ export default function App() {
         const imgData = canvas.toDataURL('image/jpeg', 0.8);
         const imgProps = pdf.getImageProperties(imgData);
         const imgHeight = (imgProps.height * (pdfWidth - 20)) / imgProps.width;
-        
+
         if (currentY + imgHeight > pdfHeight - 10) {
           pdf.addPage();
           currentY = 10;
@@ -296,7 +296,7 @@ export default function App() {
       if (action === 'share' && navigator.share) {
         const pdfBlob = pdf.output('blob');
         const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-        
+
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
@@ -323,7 +323,7 @@ export default function App() {
         <AlertTriangle size={48} className="text-rose-500 mb-4" />
         <h1 className="text-2xl font-bold text-rose-800">Ops! Algo deu errado.</h1>
         <p className="text-rose-600 mt-2 max-w-md">{error}</p>
-        <button 
+        <button
           onClick={() => window.location.reload()}
           className="mt-6 px-6 py-2 bg-rose-600 text-white rounded-lg font-bold"
         >
@@ -350,9 +350,9 @@ export default function App() {
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
-            <button 
+            <button
               onClick={() => { fetchSubmissions(); setStep('history'); }}
               className={cn(
                 "p-2.5 rounded-xl transition-all",
@@ -361,7 +361,7 @@ export default function App() {
             >
               <History size={22} />
             </button>
-            <button 
+            <button
               onClick={() => setStep('info')}
               className={cn(
                 "p-2.5 rounded-xl transition-all",
@@ -378,7 +378,7 @@ export default function App() {
       {step === 'checklist' && (
         <div className="sticky top-[73px] z-30 bg-white/80 backdrop-blur-md border-b border-stone-100">
           <div className="h-1.5 bg-stone-100 w-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-orange-500 transition-all duration-500 ease-out"
               style={{ width: `${progressPercentage}%` }}
             />
@@ -400,9 +400,9 @@ export default function App() {
               </div>
               <h2 className="text-xl md:text-2xl font-black text-stone-900 mb-2">Sucesso!</h2>
               <p className="text-sm md:text-base text-stone-500 font-medium mb-6">Auditoria salva e sincronizada localmente.</p>
-              
+
               <div className="space-y-3">
-                <button 
+                <button
                   onClick={() => generatePDF('share')}
                   disabled={isGeneratingPDF}
                   className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 disabled:opacity-50"
@@ -410,7 +410,7 @@ export default function App() {
                   {isGeneratingPDF ? <Loader2 className="animate-spin" /> : <Share2 size={20} />}
                   COMPARTILHAR PDF
                 </button>
-                <button 
+                <button
                   onClick={() => generatePDF('download')}
                   disabled={isGeneratingPDF}
                   className="w-full py-4 bg-orange-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-orange-100 disabled:opacity-50"
@@ -418,7 +418,7 @@ export default function App() {
                   {isGeneratingPDF ? <Loader2 className="animate-spin" /> : <Download size={20} />}
                   BAIXAR PDF
                 </button>
-                <button 
+                <button
                   onClick={() => { setShowSuccess(false); setStep('history'); }}
                   className="w-full py-4 bg-stone-100 text-stone-600 font-bold rounded-2xl"
                 >
@@ -436,12 +436,12 @@ export default function App() {
                 <h2 className="text-2xl md:text-3xl font-bold text-stone-900 tracking-tight">Nova Inspeção</h2>
                 <p className="text-sm md:text-base text-stone-500 mt-1">Preencha os dados da unidade para começar.</p>
               </div>
-              
+
               <div className="space-y-5 md:space-y-6">
                 <div className="space-y-1.5 md:space-y-2">
                   <label className="text-[10px] md:text-xs font-bold text-stone-400 uppercase ml-1">Unidade Operacional</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={unitName}
                     onChange={e => setUnitName(e.target.value)}
                     placeholder="Ex: Unidade Shopping Central"
@@ -451,8 +451,8 @@ export default function App() {
 
                 <div className="space-y-1.5 md:space-y-2">
                   <label className="text-[10px] md:text-xs font-bold text-stone-400 uppercase ml-1">Responsável pela Auditoria</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={inspectorName}
                     onChange={e => setInspectorName(e.target.value)}
                     placeholder="Nome completo do inspetor"
@@ -462,15 +462,15 @@ export default function App() {
 
                 <div className="space-y-1.5 md:space-y-2">
                   <label className="text-[10px] md:text-xs font-bold text-stone-400 uppercase ml-1">Data da Visita</label>
-                  <input 
-                    type="date" 
+                  <input
+                    type="date"
                     value={date}
                     onChange={e => setDate(e.target.value)}
                     className="w-full p-3.5 md:p-4 bg-stone-50 border border-stone-200 rounded-xl md:rounded-2xl focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 outline-none transition-all text-sm md:text-base"
                   />
                 </div>
 
-                <button 
+                <button
                   onClick={() => setStep('checklist')}
                   disabled={!unitName || !inspectorName}
                   className="w-full bg-[#1A1A1A] text-white font-bold py-4 md:py-5 rounded-xl md:rounded-[24px] mt-2 md:mt-4 hover:bg-stone-800 active:scale-[0.98] transition-all disabled:opacity-20 disabled:pointer-events-none shadow-xl shadow-stone-200 text-sm md:text-base"
@@ -499,7 +499,7 @@ export default function App() {
                   )}>{score.toFixed(1)}</span>
                 </div>
                 <div className="flex gap-1">
-                  <button 
+                  <button
                     disabled={currentSectionIndex === 0}
                     onClick={() => {
                       setCurrentSectionIndex(i => i - 1);
@@ -510,7 +510,7 @@ export default function App() {
                     <ChevronLeft size={18} className="md:hidden" />
                     <ChevronLeft size={20} className="hidden md:block" />
                   </button>
-                  <button 
+                  <button
                     disabled={currentSectionIndex === CHECKLIST_DATA.length - 1}
                     onClick={() => {
                       setCurrentSectionIndex(i => i + 1);
@@ -539,12 +539,12 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-2 gap-2.5 md:gap-3">
-                        <button 
+                        <button
                           onClick={() => handleStatusChange(item.id, 'conforme')}
                           className={cn(
                             "flex items-center justify-center gap-2 md:gap-3 py-3.5 md:py-4 rounded-xl md:rounded-2xl border-2 font-black text-xs md:text-sm transition-all",
-                            results[item.id]?.status === 'conforme' 
-                              ? "bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100" 
+                            results[item.id]?.status === 'conforme'
+                              ? "bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100"
                               : "bg-white border-stone-100 text-stone-400 hover:border-stone-200"
                           )}
                         >
@@ -552,12 +552,12 @@ export default function App() {
                           <CheckCircle2 size={18} className="hidden md:block" />
                           CONFORME
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleStatusChange(item.id, 'nao-conforme')}
                           className={cn(
                             "flex items-center justify-center gap-2 md:gap-3 py-3.5 md:py-4 rounded-xl md:rounded-2xl border-2 font-black text-xs md:text-sm transition-all",
-                            results[item.id]?.status === 'nao-conforme' 
-                              ? "bg-rose-500 border-rose-500 text-white shadow-lg shadow-rose-100" 
+                            results[item.id]?.status === 'nao-conforme'
+                              ? "bg-rose-500 border-rose-500 text-white shadow-lg shadow-rose-100"
                               : "bg-white border-stone-100 text-stone-400 hover:border-stone-200"
                           )}
                         >
@@ -575,7 +575,7 @@ export default function App() {
                           {results[item.id]?.photos?.map((photo, idx) => (
                             <div key={idx} className="relative w-14 h-14 md:w-16 md:h-16 rounded-lg md:rounded-xl overflow-hidden border border-stone-200 group/photo">
                               <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
-                              <button 
+                              <button
                                 onClick={() => removePhoto(item.id, idx)}
                                 className="absolute inset-0 bg-rose-500/80 text-white flex items-center justify-center opacity-0 group-hover/photo:opacity-100 transition-opacity"
                               >
@@ -586,22 +586,22 @@ export default function App() {
                           {(results[item.id]?.photos?.length || 0) < 3 && (
                             <label className="w-14 h-14 md:w-16 md:h-16 rounded-lg md:rounded-xl border-2 border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-300 hover:border-orange-300 hover:text-orange-400 cursor-pointer transition-all bg-stone-50/50">
                               <Camera size={18} />
-                              <input 
-                                type="file" 
-                                accept="image/*" 
+                              <input
+                                type="file"
+                                accept="image/*"
                                 capture="environment"
                                 multiple
-                                className="hidden" 
+                                className="hidden"
                                 onChange={(e) => handlePhotoUpload(item.id, e)}
                               />
                             </label>
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="space-y-2">
                         <label className="text-[9px] md:text-[10px] font-black text-stone-400 uppercase tracking-widest ml-1">Observações</label>
-                        <textarea 
+                        <textarea
                           placeholder="Descreva detalhes..."
                           value={results[item.id]?.observation || ''}
                           onChange={(e) => handleObservationChange(item.id, e.target.value)}
@@ -628,7 +628,7 @@ export default function App() {
 
             {/* Footer Actions */}
             <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-6 md:pt-10 pb-16 md:pb-20">
-              <button 
+              <button
                 onClick={() => {
                   if (currentSectionIndex > 0) {
                     setCurrentSectionIndex(i => i - 1);
@@ -644,7 +644,7 @@ export default function App() {
               </button>
 
               {currentSectionIndex < CHECKLIST_DATA.length - 1 ? (
-                <button 
+                <button
                   onClick={() => {
                     setCurrentSectionIndex(i => i + 1);
                     window.scrollTo(0, 0);
@@ -655,7 +655,7 @@ export default function App() {
                   <ChevronRight size={22} />
                 </button>
               ) : (
-                <button 
+                <button
                   onClick={saveSubmission}
                   disabled={isSaving || answeredItemsCount < totalItemsCount}
                   className="w-full md:flex-[2] py-4 md:py-5 bg-[#FF6B00] text-white font-black rounded-xl md:rounded-[24px] hover:bg-orange-600 transition-all shadow-xl shadow-orange-200 flex items-center justify-center gap-2 md:gap-3 disabled:opacity-20 disabled:grayscale text-sm md:text-base"
@@ -676,7 +676,7 @@ export default function App() {
                 <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tight">Histórico</h2>
                 <p className="text-sm md:text-base text-stone-500">Relatórios de auditorias anteriores.</p>
               </div>
-              <button 
+              <button
                 onClick={() => setStep('info')}
                 className="w-full md:w-auto px-6 py-3.5 bg-[#1A1A1A] text-white rounded-xl md:rounded-2xl font-bold text-sm shadow-lg shadow-stone-200 hover:bg-stone-800 transition-all"
               >
@@ -699,8 +699,8 @@ export default function App() {
                     <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
                       <div className={cn(
                         "w-14 h-14 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex flex-col items-center justify-center font-black text-lg md:text-xl shadow-sm transform group-hover:scale-105 transition-transform shrink-0",
-                        sub.score >= 8 ? "bg-emerald-50 text-emerald-600" : 
-                        sub.score >= 5 ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
+                        sub.score >= 8 ? "bg-emerald-50 text-emerald-600" :
+                          sub.score >= 5 ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
                       )}>
                         <span className="text-[8px] md:text-[10px] uppercase tracking-tighter opacity-50">Score</span>
                         {sub.score.toFixed(1)}
@@ -714,9 +714,9 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex gap-2 w-full md:w-auto">
-                      <button 
+                      <button
                         onClick={() => {
                           setUnitName(sub.unit_name);
                           setInspectorName(sub.inspector_name);
@@ -737,7 +737,7 @@ export default function App() {
                         )}
                         {isGeneratingPDF ? 'GERANDO...' : 'PDF'}
                       </button>
-                      <button 
+                      <button
                         onClick={() => {
                           setUnitName(sub.unit_name);
                           setInspectorName(sub.inspector_name);
@@ -925,7 +925,7 @@ export default function App() {
 
       {/* Modern Bottom Nav */}
       <nav className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 bg-[#1A1A1A] text-white px-6 md:px-8 py-3 md:py-4 rounded-3xl md:rounded-[32px] flex items-center gap-8 md:gap-12 z-50 shadow-2xl shadow-stone-900/20 border border-white/10 w-[90%] md:w-auto justify-center">
-        <button 
+        <button
           onClick={() => setStep('info')}
           className={cn("flex flex-col items-center gap-1 transition-all", step === 'info' ? "text-orange-500 scale-110" : "text-stone-500 hover:text-stone-300")}
         >
@@ -933,7 +933,7 @@ export default function App() {
           <Plus size={24} className="hidden md:block" />
           <span className="text-[7px] md:text-[8px] font-black uppercase tracking-widest">Novo</span>
         </button>
-        <button 
+        <button
           onClick={() => setStep('checklist')}
           className={cn("flex flex-col items-center gap-1 transition-all", step === 'checklist' ? "text-orange-500 scale-110" : "text-stone-500 hover:text-stone-300")}
         >
@@ -941,7 +941,7 @@ export default function App() {
           <CheckCircle2 size={24} className="hidden md:block" />
           <span className="text-[7px] md:text-[8px] font-black uppercase tracking-widest">Check</span>
         </button>
-        <button 
+        <button
           onClick={() => { fetchSubmissions(); setStep('history'); }}
           className={cn("flex flex-col items-center gap-1 transition-all", step === 'history' ? "text-orange-500 scale-110" : "text-stone-500 hover:text-stone-300")}
         >
