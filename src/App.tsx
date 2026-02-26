@@ -785,56 +785,96 @@ export default function App() {
             </div>
           </div>
 
-          {/* Checklist Sections */}
-          {CHECKLIST_DATA.map((section, sIdx) => (
-            <div key={sIdx} className="mb-10">
-              <div className="bg-[#1A1A1A] text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center">
-                <h2 className="text-sm font-black uppercase tracking-widest">{section.title}</h2>
-              </div>
+          {/* Checklist Sections - Reordered for Audit Priority */}
+          {(() => {
+            const allItems = CHECKLIST_DATA.flatMap(s => s.items.map(i => ({ ...i, sectionTitle: s.title })));
+            const nonConforming = allItems.filter(i => results[i.id]?.status === 'nao-conforme');
+            const conforming = allItems.filter(i => results[i.id]?.status === 'conforme');
 
-              <div className="space-y-8">
-                {section.items.map((item, iIdx) => {
-                  const res = results[item.id];
-                  if (!res) return null;
-                  return (
-                    <div key={iIdx} className="border-b border-stone-100 pb-8 last:border-0">
-                      <div className="flex justify-between items-start gap-6 mb-4">
-                        <div className="flex-1">
-                          <p className="text-base font-bold text-stone-800">
-                            <span className="text-orange-500 mr-2">#{item.id}</span>
-                            {item.question}
-                          </p>
-                        </div>
-                        <div className={cn(
-                          "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest shrink-0",
-                          res.status === 'conforme' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-                        )}>
-                          {res.status === 'conforme' ? 'Conforme' : 'Não Conforme'}
-                        </div>
-                      </div>
-
-                      {res.observation && (
-                        <div className="bg-amber-50/50 border-l-4 border-amber-200 p-4 rounded-r-xl mb-4">
-                          <p className="text-[9px] font-black text-amber-500 uppercase mb-1">Observações do Auditor</p>
-                          <p className="text-sm text-stone-700 italic">"{res.observation}"</p>
-                        </div>
-                      )}
-
-                      {res.photos.length > 0 && (
-                        <div className="grid grid-cols-3 gap-3">
-                          {res.photos.map((photo, pIdx) => (
-                            <div key={pIdx} className="aspect-square rounded-xl overflow-hidden border-2 border-stone-100">
-                              <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+            return (
+              <>
+                {/* Non-Conforming Section (Priority) */}
+                {nonConforming.length > 0 && (
+                  <div className="mb-12">
+                    <div className="bg-rose-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center shadow-lg shadow-rose-100">
+                      <h2 className="text-sm font-black uppercase tracking-widest">ITENS NÃO CONFORMES - REQUER ATENÇÃO</h2>
+                      <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full">{nonConforming.length} Itens</span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+
+                    <div className="space-y-8">
+                      {nonConforming.map((item, idx) => {
+                        const res = results[item.id];
+                        return (
+                          <div key={idx} className="border-b-2 border-stone-100 pb-8 last:border-0">
+                            <div className="flex justify-between items-start gap-6 mb-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-[8px] font-black bg-stone-100 text-stone-400 px-2 py-0.5 rounded uppercase tracking-widest">
+                                    {item.sectionTitle}
+                                  </span>
+                                </div>
+                                <p className="text-base font-bold text-stone-800">
+                                  <span className="text-rose-500 mr-2">#{item.id}</span>
+                                  {item.question}
+                                </p>
+                              </div>
+                              <div className="px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest shrink-0 bg-rose-50 text-rose-600 border border-rose-100">
+                                Não Conforme
+                              </div>
+                            </div>
+
+                            {res.observation && (
+                              <div className="bg-amber-50/50 border-l-4 border-amber-200 p-4 rounded-r-xl mb-4">
+                                <p className="text-[9px] font-black text-amber-500 uppercase mb-1">Observações do Auditor</p>
+                                <p className="text-sm text-stone-700 italic">"{res.observation}"</p>
+                              </div>
+                            )}
+
+                            {res.photos.length > 0 && (
+                              <div className="grid grid-cols-3 gap-3">
+                                {res.photos.map((photo, pIdx) => (
+                                  <div key={pIdx} className="aspect-square rounded-xl overflow-hidden border-2 border-stone-100">
+                                    <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Conforming Section */}
+                {conforming.length > 0 && (
+                  <div className="mb-10">
+                    <div className="bg-emerald-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center">
+                      <h2 className="text-sm font-black uppercase tracking-widest">ITENS EM CONFORMIDADE</h2>
+                      <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full">{conforming.length} Itens</span>
+                    </div>
+
+                    <div className="space-y-6">
+                      {conforming.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center py-3 border-b border-stone-50 last:border-0">
+                          <div className="flex-1 pr-4">
+                            <p className="text-sm font-medium text-stone-600">
+                              <span className="text-stone-300 mr-2 font-bold">{item.id}</span>
+                              {item.question}
+                            </p>
+                            <span className="text-[8px] text-stone-300 uppercase font-bold tracking-tighter">{item.sectionTitle}</span>
+                          </div>
+                          <div className="px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600">
+                            OK
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Footer */}
           <div className="mt-20 pt-10 border-t-2 border-stone-100 text-center">
