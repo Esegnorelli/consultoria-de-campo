@@ -1,34 +1,21 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import Database from "better-sqlite3";
+import { createClient } from "@supabase/supabase-js";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let db: any;
-try {
-  db = new Database("checklist.db");
-  // Initialize database
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS submissions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      unit_name TEXT,
-      inspector_name TEXT,
-      date TEXT,
-      score REAL,
-      data TEXT, -- JSON string of the checklist results
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-} catch (err) {
-  console.error("Failed to initialize database:", err);
-  // Fallback to in-memory or mock if needed, but for now just log
-}
+const supabaseUrl = process.env.SUPABASE_URL || "https://zncxgpcqubsqrfqxmhhx.supabase.co";
+const supabaseKey = process.env.SUPABASE_ANON_KEY || "sb_publishable_O4Ozf7bprRosDluP37mAiA_ShAlr-m0";
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function startServer() {
-  console.log("Starting server... NODE_ENV:", process.env.NODE_ENV);
+  console.log("Starting server with Supabase integration...");
   const app = express();
   const PORT = 3000;
 
@@ -37,29 +24,42 @@ async function startServer() {
   app.get("/ping", (req, res) => res.send("pong"));
 
   // API Routes
-  app.post("/api/submissions", (req, res) => {
-    if (!db) return res.status(503).json({ error: "Database not available" });
+  app.post("/api/submissions", async (req, res) => {
     const { unit_name, inspector_name, date, score, data } = req.body;
     try {
-      const stmt = db.prepare(
-        "INSERT INTO submissions (unit_name, inspector_name, date, score, data) VALUES (?, ?, ?, ?, ?)"
-      );
-      const result = stmt.run(unit_name, inspector_name, date, score, JSON.stringify(data));
-      res.json({ id: result.lastInsertRowid });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Failed to save submission" });
+      const { data: insertedData, error } = await supabase
+        .from('submissions')
+        .insert([
+          { 
+            unit_name, 
+            inspector_name, 
+            date, 
+            score, 
+            data // Supabase handles JSON objects automatically if column is jsonb
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+      res.json({ id: insertedData[0].id });
+    } catch (error: any) {
+      console.error("Supabase Save Error:", error.message);
+      res.status(500).json({ error: "Failed to save submission to Supabase" });
     }
   });
 
-  app.get("/api/submissions", (req, res) => {
-    if (!db) return res.json([]);
+  app.get("/api/submissions", async (req, res) => {
     try {
-      const submissions = db.prepare("SELECT * FROM submissions ORDER BY created_at DESC").all();
-      res.json(submissions.map((s: any) => ({ ...s, data: JSON.parse(s.data as string) })));
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Failed to fetch submissions" });
+      const { data: submissions, error } = await supabase
+        .from('submissions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      res.json(submissions);
+    } catch (error: any) {
+      console.error("Supabase Fetch Error:", error.message);
+      res.status(500).json({ error: "Failed to fetch submissions from Supabase" });
     }
   });
 
