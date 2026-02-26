@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -11,10 +11,10 @@ import {
   Trash2,
   Plus,
   Loader2,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { CHECKLIST_DATA, ChecklistItem } from './constants';
+import { CHECKLIST_DATA } from './constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import jsPDF from 'jspdf';
@@ -37,6 +37,7 @@ interface ChecklistResults {
 }
 
 export default function App() {
+  const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'info' | 'checklist' | 'history'>('info');
   const [unitName, setUnitName] = useState('');
   const [inspectorName, setInspectorName] = useState('');
@@ -47,6 +48,31 @@ export default function App() {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
 
   const reportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      setError(event.message);
+    };
+    window.addEventListener('error', handleError);
+    fetchSubmissions();
+    return () => window.removeEventListener('error', handleError);
+  }, []);
+
+  if (error) {
+    return (
+      <div className="p-10 text-center bg-rose-50 min-h-screen flex flex-col items-center justify-center">
+        <AlertTriangle size={48} className="text-rose-500 mb-4" />
+        <h1 className="text-2xl font-bold text-rose-800">Ops! Algo deu errado.</h1>
+        <p className="text-rose-600 mt-2 max-w-md">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-6 px-6 py-2 bg-rose-600 text-white rounded-lg font-bold"
+        >
+          Tentar Novamente
+        </button>
+      </div>
+    );
+  }
 
   const currentSection = CHECKLIST_DATA[currentSectionIndex];
 
@@ -133,7 +159,6 @@ export default function App() {
 
       if (response.ok) {
         alert('Checklist salvo com sucesso!');
-        // Reset or go to history
         fetchSubmissions();
         setStep('history');
       }
@@ -201,15 +226,8 @@ export default function App() {
       </header>
 
       <main className="max-w-4xl mx-auto p-4 mt-4">
-        <AnimatePresence mode="wait">
           {step === 'info' && (
-            <motion.div 
-              key="info"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200"
-            >
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-stone-200">
               <h2 className="text-2xl font-bold mb-6 text-stone-800">Nova Inspeção</h2>
               <div className="space-y-4">
                 <div>
@@ -249,16 +267,11 @@ export default function App() {
                   Iniciar Checklist
                 </button>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {step === 'checklist' && (
-            <motion.div 
-              key="checklist"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6"
-            >
+            <div className="space-y-6">
               <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-stone-200 shadow-sm sticky top-24 z-20">
                 <div className="flex items-center gap-4">
                   <div className="bg-orange-100 text-orange-700 w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl">
@@ -377,16 +390,11 @@ export default function App() {
                   Finalizar e Salvar
                 </button>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {step === 'history' && (
-            <motion.div 
-              key="history"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-4"
-            >
+            <div className="space-y-4">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold text-stone-800">Histórico</h2>
                 <button 
@@ -423,7 +431,6 @@ export default function App() {
                           setInspectorName(sub.inspector_name);
                           setDate(sub.date);
                           setResults(sub.data);
-                          // We could add a "view" mode, but for now let's just allow generating PDF
                           setTimeout(generatePDF, 100);
                         }}
                         className="p-2 hover:bg-stone-100 rounded-lg text-stone-600"
@@ -435,9 +442,8 @@ export default function App() {
                   </div>
                 ))
               )}
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
       </main>
 
       {/* Hidden Report for PDF Generation */}
