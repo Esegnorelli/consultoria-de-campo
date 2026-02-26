@@ -20,6 +20,11 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = "https://zncxgpcqubsqrfqxmhhx.supabase.co";
+const supabaseKey = "sb_publishable_O4Ozf7bprRosDluP37mAiA_ShAlr-m0";
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -175,19 +180,21 @@ export default function App() {
         data: results
       };
 
-      const response = await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSubmission)
-      });
+      const { data: insertedData, error } = await supabase
+        .from('submissions')
+        .insert([newSubmission])
+        .select();
 
-      if (!response.ok) throw new Error('Falha ao salvar no servidor');
+      if (error) {
+        console.error('Supabase Error:', error);
+        throw new Error(error.message);
+      }
 
       setShowSuccess(true);
       fetchSubmissions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Save error:', error);
-      alert('Erro ao salvar no banco de dados. Verifique sua conexão.');
+      alert(`Erro ao salvar no Supabase: ${error.message || 'Verifique se a tabela "submissions" foi criada.'}`);
     } finally {
       setIsSaving(false);
     }
@@ -195,10 +202,13 @@ export default function App() {
 
   const fetchSubmissions = async () => {
     try {
-      const response = await fetch('/api/submissions');
-      if (!response.ok) throw new Error('Falha ao buscar dados');
-      const data = await response.json();
-      setSubmissions(data);
+      const { data, error } = await supabase
+        .from('submissions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setSubmissions(data || []);
     } catch (error) {
       console.error('Fetch error:', error);
     }
