@@ -215,70 +215,79 @@ export default function App() {
   };
 
   const generatePDF = async (action: 'download' | 'share' = 'download') => {
-    const reportElement = document.getElementById('report-container');
-    if (!reportElement) {
-      alert('Erro: Relatório não encontrado. Recarregue a página.');
+    const reportContainer = document.getElementById('report-container');
+    if (!reportContainer) {
+      alert('Erro: Relatório não encontrado.');
       return;
     }
     
     setIsGeneratingPDF(true);
     
     try {
-      // Helper to wait for all images to load
-      const images = Array.from(reportElement.getElementsByTagName('img'));
-      const imagePromises = images.map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve; // Continue even if one image fails
-        });
-      });
+      // Ensure rendering is stable
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Wait for all images to be ready
-      await Promise.all(imagePromises);
-      // Extra tick for layout stabilization
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const canvas = await html2canvas(reportElement, {
-        scale: 1,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        width: 800,
-        height: reportElement.offsetHeight,
-        imageTimeout: 60000,
-        onclone: (clonedDoc) => {
-          const el = clonedDoc.getElementById('report-container');
-          if (el) {
-            el.style.position = 'static';
-            el.style.visibility = 'visible';
-            el.style.opacity = '1';
-            el.style.display = 'block';
-          }
-        }
-      });
-      
-      const imgData = canvas.toDataURL('image/jpeg', 0.7);
       const pdf = new jsPDF('p', 'mm', 'a4');
-      
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgProps = pdf.getImageProperties(imgData);
-      const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      let heightLeft = imgHeight;
-      let position = 0;
+      // We'll capture the header first, then the sections
+      const elementsToCapture = [
+        document.getElementById('pdf-header'),
+        document.getElementById('pdf-info'),
+        ...Array.from(document.querySelectorAll('.pdf-section'))
+      ].filter(Boolean) as HTMLElement[];
 
-      // Add first page
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pdfHeight;
+      let currentY = 10; // Margin top
 
-      // Add subsequent pages
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= pdfHeight;
+      for (let i = 0; i < elementsToCapture.length; i++) {
+        const element = elementsToCapture[i];
+        
+        const canvas = await html2canvas(element, {
+          scale: 2, // Good quality for small sections
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: element.offsetWidth,
+          height: element.offsetHeight,
+          onclone: (clonedDoc) => {
+            const el = clonedDoc.getElementById(element.id) || clonedDoc.querySelector(`.${element.className.split(' ').join('.')}`);
+            if (el instanceof HTMLElement) {
+              el.style.position = 'static';
+              el.style.visibility = 'visible';
+              el.style.display = 'block';
+              el.style.opacity = '1';
+            }
+          }
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * (pdfWidth - 20)) / imgProps.width;
+
+        // Check if we need a new page
+        if (currentY + imgHeight > pdfHeight - 10) {
+          pdf.addPage();
+          currentY = 10;
+        }
+
+        pdf.addImage(imgData, 'JPEG', 10, currentY, pdfWidth - 20, imgHeight);
+        currentY += imgHeight + 5; // Spacing between sections
+      }
+
+      // Add Footer on last page
+      const footer = document.getElementById('pdf-footer');
+      if (footer) {
+        const canvas = await html2canvas(footer, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * (pdfWidth - 20)) / imgProps.width;
+        
+        if (currentY + imgHeight > pdfHeight - 10) {
+          pdf.addPage();
+          currentY = 10;
+        }
+        pdf.addImage(imgData, 'JPEG', 10, currentY, pdfWidth - 20, imgHeight);
       }
 
       const safeUnitName = (unitName || 'AUDITORIA').toUpperCase().replace(/\s+/g, '_');
@@ -565,7 +574,7 @@ export default function App() {
                         <div className="flex gap-2">
                           {results[item.id]?.photos?.map((photo, idx) => (
                             <div key={idx} className="relative w-14 h-14 md:w-16 md:h-16 rounded-lg md:rounded-xl overflow-hidden border border-stone-200 group/photo">
-                              <img src={photo} alt="Evidência" className="w-full h-full object-cover" loading="lazy" />
+                              <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
                               <button 
                                 onClick={() => removePhoto(item.id, idx)}
                                 className="absolute inset-0 bg-rose-500/80 text-white flex items-center justify-center opacity-0 group-hover/photo:opacity-100 transition-opacity"
@@ -752,10 +761,10 @@ export default function App() {
       </main>
 
       {/* Hidden Report for PDF Generation - Optimized for Mobile Capture */}
-      <div style={{ position: 'absolute', top: '0', left: '-9999px', width: '800px', visibility: 'hidden' }}>
+      <div style={{ position: 'absolute', top: '0', left: '-9999px', width: '800px', opacity: 0, pointerEvents: 'none' }}>
         <div id="report-container" className="bg-white p-10 text-stone-900 font-sans" style={{ width: '800px' }}>
           {/* Header */}
-          <div className="flex justify-between items-center border-b-8 border-[#FF6B00] pb-6 mb-8">
+          <div id="pdf-header" className="flex justify-between items-center border-b-8 border-[#FF6B00] pb-6 mb-8">
             <div>
               <h1 className="text-4xl font-black text-[#FF6B00] tracking-tighter">HORA DO PASTEL</h1>
               <p className="text-sm font-bold text-stone-500 uppercase tracking-[0.2em]">Relatório Técnico de Auditoria Operacional</p>
@@ -770,7 +779,7 @@ export default function App() {
           </div>
 
           {/* Info Grid */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
+          <div id="pdf-info" className="grid grid-cols-2 gap-4 mb-8">
             <div className="border-2 border-stone-100 p-4 rounded-2xl">
               <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Unidade Auditada</p>
               <p className="text-lg font-bold text-stone-800">{unitName || 'N/A'}</p>
@@ -803,7 +812,7 @@ export default function App() {
                 {/* Non-Conforming Section (Priority) */}
                 {nonConforming.length > 0 && (
                   <div className="mb-12">
-                    <div className="bg-rose-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center shadow-lg shadow-rose-100">
+                    <div id="pdf-non-conforming-header" className="pdf-section bg-rose-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center shadow-lg shadow-rose-100">
                       <h2 className="text-sm font-black uppercase tracking-widest">ITENS NÃO CONFORMES - REQUER ATENÇÃO</h2>
                       <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full">{nonConforming.length} Itens</span>
                     </div>
@@ -812,7 +821,7 @@ export default function App() {
                       {nonConforming.map((item, idx) => {
                         const res = results[item.id];
                         return (
-                          <div key={idx} className="border-b-2 border-stone-100 pb-8 last:border-0">
+                          <div key={idx} className="pdf-section border-b-2 border-stone-100 pb-8 last:border-0">
                             <div className="flex justify-between items-start gap-6 mb-4">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
@@ -841,7 +850,7 @@ export default function App() {
                               <div className="grid grid-cols-3 gap-3">
                                 {res.photos.map((photo, pIdx) => (
                                   <div key={pIdx} className="aspect-square rounded-xl overflow-hidden border-2 border-stone-100">
-                                    <img src={photo} alt="Evidência" className="w-full h-full object-cover" loading="lazy" />
+                                    <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
                                   </div>
                                 ))}
                               </div>
@@ -856,24 +865,29 @@ export default function App() {
                 {/* Conforming Section */}
                 {conforming.length > 0 && (
                   <div className="mb-10">
-                    <div className="bg-emerald-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center">
+                    <div id="pdf-conforming-header" className="pdf-section bg-emerald-600 text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center">
                       <h2 className="text-sm font-black uppercase tracking-widest">ITENS EM CONFORMIDADE</h2>
                       <span className="text-xs font-bold bg-white/20 px-3 py-1 rounded-full">{conforming.length} Itens</span>
                     </div>
 
                     <div className="space-y-6">
-                      {conforming.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center py-3 border-b border-stone-50 last:border-0">
-                          <div className="flex-1 pr-4">
-                            <p className="text-sm font-medium text-stone-600">
-                              <span className="text-stone-300 mr-2 font-bold">{item.id}</span>
-                              {item.question}
-                            </p>
-                            <span className="text-[8px] text-stone-300 uppercase font-bold tracking-tighter">{item.sectionTitle}</span>
-                          </div>
-                          <div className="px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600">
-                            OK
-                          </div>
+                      {/* Group conforming items in chunks of 10 to keep sections small */}
+                      {Array.from({ length: Math.ceil(conforming.length / 10) }).map((_, chunkIdx) => (
+                        <div key={chunkIdx} className="pdf-section">
+                          {conforming.slice(chunkIdx * 10, (chunkIdx + 1) * 10).map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center py-3 border-b border-stone-50 last:border-0">
+                              <div className="flex-1 pr-4">
+                                <p className="text-sm font-medium text-stone-600">
+                                  <span className="text-stone-300 mr-2 font-bold">{item.id}</span>
+                                  {item.question}
+                                </p>
+                                <span className="text-[8px] text-stone-300 uppercase font-bold tracking-tighter">{item.sectionTitle}</span>
+                              </div>
+                              <div className="px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600">
+                                OK
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>
@@ -884,12 +898,30 @@ export default function App() {
           })()}
 
           {/* Footer */}
-          <div className="mt-20 pt-10 border-t-2 border-stone-100 text-center">
+          <div id="pdf-footer" className="mt-20 pt-10 border-t-2 border-stone-100 text-center">
             <p className="text-[10px] font-black text-stone-300 uppercase tracking-[0.5em] mb-2">Relatório Gerado Eletronicamente via Sistema de Auditoria Hora do Pastel</p>
             <p className="text-[8px] text-stone-300">ID do Documento: {Date.now()}</p>
           </div>
         </div>
       </div>
+
+      {/* PDF Generation Loading Overlay */}
+      {isGeneratingPDF && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[32px] p-8 max-w-sm w-full text-center shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div className="w-20 h-20 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-200">
+              <Loader2 size={40} className="text-white animate-spin" />
+            </div>
+            <h3 className="text-xl font-black text-stone-800 mb-2">Gerando Relatório</h3>
+            <p className="text-stone-500 font-bold text-sm leading-relaxed">
+              Estamos processando os dados e imagens. Isso pode levar alguns segundos...
+            </p>
+            <div className="mt-6 h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
+              <div className="h-full bg-orange-500 animate-progress w-full origin-left"></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modern Bottom Nav */}
       <nav className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 bg-[#1A1A1A] text-white px-6 md:px-8 py-3 md:py-4 rounded-3xl md:rounded-[32px] flex items-center gap-8 md:gap-12 z-50 shadow-2xl shadow-stone-900/20 border border-white/10 w-[90%] md:w-auto justify-center">
