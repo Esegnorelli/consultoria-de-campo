@@ -242,26 +242,41 @@ export default function App() {
 
     try {
       // Give a small delay to ensure the DOM is updated with the latest state
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
+        scale: 1, // Minimum scale for maximum compatibility on mobile
         useCORS: true,
         logging: false,
-        allowTaint: true,
         backgroundColor: '#ffffff',
-        windowWidth: 1200,
+        windowWidth: 800, // Match the container width
+        imageTimeout: 30000, // Even more time for images
       });
       
       console.log('Canvas captured successfully');
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 0.8);
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      // Handle multi-page if necessary (simplified for now)
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // First page
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      // Subsequent pages if the content is longer than one A4 page
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+
       pdf.save(`Checklist_${unitName || 'Auditoria'}_${date}.pdf`);
       console.log('PDF saved successfully');
     } catch (err) {
@@ -675,7 +690,7 @@ export default function App() {
       </main>
 
       {/* Hidden Report for PDF Generation */}
-      <div className="fixed left-[-9999px] top-0 overflow-hidden">
+      <div className="absolute opacity-0 pointer-events-none top-0 left-0 overflow-hidden" style={{ zIndex: -1 }}>
         <div ref={reportRef} id="report-container" className="w-[800px] bg-white p-12 text-stone-900 font-sans">
           <div className="flex justify-between items-start border-b-4 border-[#FF6B00] pb-8 mb-10">
             <div>
