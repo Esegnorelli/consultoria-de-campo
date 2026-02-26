@@ -51,6 +51,21 @@ export default function App() {
 
   const reportRef = useRef<HTMLDivElement>(null);
 
+  // Helper for IndexedDB
+  const getDB = () => {
+    return new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('ChecklistDB', 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains('submissions')) {
+          db.createObjectStore('submissions', { keyPath: 'id' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  };
+
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
       setError(event.message);
@@ -62,14 +77,35 @@ export default function App() {
 
   const currentSection = CHECKLIST_DATA[currentSectionIndex];
 
-  const handleStatusChange = (itemId: string, status: Status) => {
-    setResults(prev => ({
-      ...prev,
-      [itemId]: {
-        ...(prev[itemId] || { photos: [], observation: '' }),
-        status
-      }
-    }));
+  const compressImage = (base64Str: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); // Compress to JPEG 70%
+      };
+    });
   };
 
   const handlePhotoUpload = (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,17 +120,28 @@ export default function App() {
 
     Array.from(files).slice(0, 3 - currentPhotos.length).forEach((file: File) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
+        const compressed = await compressImage(reader.result as string);
         setResults(prev => ({
           ...prev,
           [itemId]: {
             ...(prev[itemId] || { status: null, observation: '' }),
-            photos: [...(prev[itemId]?.photos || []), reader.result as string]
+            photos: [...(prev[itemId]?.photos || []), compressed]
           }
         }));
       };
       reader.readAsDataURL(file);
     });
+  };
+
+  const handleStatusChange = (itemId: string, status: Status) => {
+    setResults(prev => ({
+      ...prev,
+      [itemId]: {
+        ...(prev[itemId] || { photos: [], observation: '' }),
+        status
+      }
+    }));
   };
 
   const removePhoto = (itemId: string, photoIndex: number) => {
@@ -143,9 +190,15 @@ export default function App() {
         data: results
       };
 
-      const existingSubmissions = JSON.parse(localStorage.getItem('checklist_submissions') || '[]');
-      const updatedSubmissions = [newSubmission, ...existingSubmissions];
-      localStorage.setItem('checklist_submissions', JSON.stringify(updatedSubmissions));
+      const db = await getDB();
+      const tx = db.transaction('submissions', 'readwrite');
+      const store = tx.objectStore('submissions');
+      store.add(newSubmission);
+
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
 
       setShowSuccess(true);
       fetchSubmissions();
@@ -154,8 +207,8 @@ export default function App() {
         setStep('history');
       }, 2000);
     } catch (error) {
-      console.error(error);
-      alert('Erro ao salvar checklist.');
+      console.error('Save error:', error);
+      alert('Erro ao salvar checklist. O armazenamento pode estar cheio ou indisponível.');
     } finally {
       setIsSaving(false);
     }
@@ -163,10 +216,18 @@ export default function App() {
 
   const fetchSubmissions = async () => {
     try {
-      const data = JSON.parse(localStorage.getItem('checklist_submissions') || '[]');
-      setSubmissions(data);
+      const db = await getDB();
+      const tx = db.transaction('submissions', 'readonly');
+      const store = tx.objectStore('submissions');
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const data = request.result;
+        // Sort by date descending
+        setSubmissions(data.sort((a: any, b: any) => b.id - a.id));
+      };
     } catch (error) {
-      console.error(error);
+      console.error('Fetch error:', error);
     }
   };
 
