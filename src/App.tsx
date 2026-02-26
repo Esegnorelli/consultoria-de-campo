@@ -234,27 +234,36 @@ export default function App() {
   const generatePDF = async (action: 'download' | 'share' = 'download') => {
     const reportElement = document.getElementById('report-container');
     if (!reportElement) {
-      console.error('Report element not found');
+      alert('Erro técnico: Recipiente do relatório não encontrado. Por favor, recarregue a página.');
       return;
     }
     
     setIsGeneratingPDF(true);
     
     try {
-      // Ensure images are loaded
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Small delay to ensure all images (even base64) are ready for the canvas
+      await new Promise(resolve => setTimeout(resolve, 1200));
 
       const canvas = await html2canvas(reportElement, {
-        scale: 1,
+        scale: 1, // Keep scale at 1 for maximum stability
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
         windowWidth: 800,
-        imageTimeout: 40000,
-        removeContainer: true,
+        imageTimeout: 60000, // Increase to 60s for many photos
+        onclone: (clonedDoc) => {
+          const el = clonedDoc.getElementById('report-container');
+          if (el) {
+            el.style.position = 'relative';
+            el.style.top = '0';
+            el.style.left = '0';
+            el.style.opacity = '1';
+            el.style.display = 'block';
+          }
+        }
       });
       
-      const imgData = canvas.toDataURL('image/jpeg', 0.7);
+      const imgData = canvas.toDataURL('image/jpeg', 0.6); // Lower quality slightly for stability
       const pdf = new jsPDF('p', 'mm', 'a4');
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -265,37 +274,43 @@ export default function App() {
       let heightLeft = imgHeight;
       let position = 0;
 
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, undefined, 'FAST');
       heightLeft -= pdfHeight;
 
       while (heightLeft >= 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, undefined, 'FAST');
         heightLeft -= pdfHeight;
       }
 
-      const fileName = `AUDITORIA_${unitName.toUpperCase().replace(/\s+/g, '_')}_${date}.pdf`;
+      const safeUnitName = (unitName || 'AUDITORIA').toUpperCase().replace(/\s+/g, '_');
+      const fileName = `AUDITORIA_${safeUnitName}_${date}.pdf`;
 
       if (action === 'share' && navigator.share) {
-        const pdfBlob = pdf.output('blob');
-        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-        
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: 'Relatório de Auditoria - Hora do Pastel',
-            text: `Segue relatório da unidade ${unitName}`,
-          });
-        } else {
-          pdf.save(fileName);
+        try {
+          const pdfBlob = pdf.output('blob');
+          const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Relatório de Auditoria - Hora do Pastel',
+              text: `Segue relatório da unidade ${unitName}`,
+            });
+          } else {
+            pdf.save(fileName);
+          }
+        } catch (shareErr) {
+          console.error('Share error:', shareErr);
+          pdf.save(fileName); // Fallback to download if share fails
         }
       } else {
         pdf.save(fileName);
       }
     } catch (err) {
-      console.error('PDF Error:', err);
-      alert('Houve um problema ao gerar o PDF. Tente baixar novamente pelo histórico.');
+      console.error('PDF Generation Error:', err);
+      alert('Erro ao processar as fotos do PDF. Tente reduzir o número de fotos ou baixar novamente pelo histórico.');
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -745,7 +760,7 @@ export default function App() {
       </main>
 
       {/* Hidden Report for PDF Generation - Optimized for Mobile Capture */}
-      <div style={{ position: 'absolute', top: '-9999px', left: '0', width: '800px' }}>
+      <div style={{ position: 'fixed', top: '0', left: '0', width: '800px', zIndex: -100, opacity: 0.01, pointerEvents: 'none' }}>
         <div id="report-container" className="bg-white p-10 text-stone-900 font-sans">
           {/* Header */}
           <div className="flex justify-between items-center border-b-8 border-[#FF6B00] pb-6 mb-8">
