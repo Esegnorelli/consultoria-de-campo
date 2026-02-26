@@ -44,6 +44,7 @@ export default function App() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [results, setResults] = useState<ChecklistResults>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
@@ -170,22 +171,44 @@ export default function App() {
   };
 
   const generatePDF = async () => {
-    if (!reportRef.current) return;
+    if (!reportRef.current) {
+      console.error('Report reference not found');
+      return;
+    }
     
-    const canvas = await html2canvas(reportRef.current, {
-      scale: 2,
-      useCORS: true,
-      logging: false
-    });
-    
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`Checklist_${unitName}_${date}.pdf`);
+    setIsGeneratingPDF(true);
+    console.log('Starting PDF generation...');
+
+    try {
+      // Give a small delay to ensure the DOM is updated with the latest state
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        windowWidth: 1200,
+      });
+      
+      console.log('Canvas captured successfully');
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // Handle multi-page if necessary (simplified for now)
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Checklist_${unitName || 'Auditoria'}_${date}.pdf`);
+      console.log('PDF saved successfully');
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      alert('Erro ao gerar o PDF. Por favor, tente novamente.');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   if (error) {
@@ -545,13 +568,20 @@ export default function App() {
                         setInspectorName(sub.inspector_name);
                         setDate(sub.date);
                         setResults(sub.data);
-                        setTimeout(generatePDF, 100);
+                        generatePDF();
                       }}
-                      className="w-full md:w-auto flex items-center justify-center gap-2 md:gap-3 px-5 py-3.5 md:px-6 md:py-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-orange-500 hover:text-white transition-all group/btn"
+                      disabled={isGeneratingPDF}
+                      className="w-full md:w-auto flex items-center justify-center gap-2 md:gap-3 px-5 py-3.5 md:px-6 md:py-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-orange-500 hover:text-white transition-all group/btn disabled:opacity-50"
                     >
-                      <Download size={16} className="md:hidden" />
-                      <Download size={18} className="hidden md:block group-hover/btn:animate-bounce" />
-                      DOWNLOAD PDF
+                      {isGeneratingPDF ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <>
+                          <Download size={16} className="md:hidden" />
+                          <Download size={18} className="hidden md:block group-hover/btn:animate-bounce" />
+                        </>
+                      )}
+                      {isGeneratingPDF ? 'GERANDO...' : 'DOWNLOAD PDF'}
                     </button>
                   </div>
                 ))}
@@ -562,8 +592,8 @@ export default function App() {
       </main>
 
       {/* Hidden Report for PDF Generation */}
-      <div className="fixed left-[-9999px] top-0">
-        <div ref={reportRef} className="w-[210mm] bg-white p-12 text-stone-900 font-sans">
+      <div className="fixed left-[-9999px] top-0 overflow-hidden">
+        <div ref={reportRef} id="report-container" className="w-[800px] bg-white p-12 text-stone-900 font-sans">
           <div className="flex justify-between items-start border-b-4 border-[#FF6B00] pb-8 mb-10">
             <div>
               <h1 className="text-4xl font-black text-[#FF6B00] tracking-tighter">HORA DO PASTEL</h1>
