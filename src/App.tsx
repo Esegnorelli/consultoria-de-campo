@@ -234,36 +234,35 @@ export default function App() {
   const generatePDF = async (action: 'download' | 'share' = 'download') => {
     const reportElement = document.getElementById('report-container');
     if (!reportElement) {
-      alert('Erro técnico: Recipiente do relatório não encontrado. Por favor, recarregue a página.');
+      alert('Erro: Relatório não encontrado. Recarregue a página.');
       return;
     }
     
     setIsGeneratingPDF(true);
     
     try {
-      // Small delay to ensure all images (even base64) are ready for the canvas
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      // Small delay to ensure rendering is complete
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       const canvas = await html2canvas(reportElement, {
-        scale: 1, // Keep scale at 1 for maximum stability
+        scale: 1,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 800,
-        imageTimeout: 60000, // Increase to 60s for many photos
+        width: 800,
+        height: reportElement.offsetHeight,
         onclone: (clonedDoc) => {
           const el = clonedDoc.getElementById('report-container');
           if (el) {
-            el.style.position = 'relative';
-            el.style.top = '0';
-            el.style.left = '0';
+            el.style.position = 'static';
+            el.style.visibility = 'visible';
             el.style.opacity = '1';
             el.style.display = 'block';
           }
         }
       });
       
-      const imgData = canvas.toDataURL('image/jpeg', 0.6); // Lower quality slightly for stability
+      const imgData = canvas.toDataURL('image/jpeg', 0.7);
       const pdf = new jsPDF('p', 'mm', 'a4');
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -274,13 +273,15 @@ export default function App() {
       let heightLeft = imgHeight;
       let position = 0;
 
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, undefined, 'FAST');
+      // Add first page
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
       heightLeft -= pdfHeight;
 
-      while (heightLeft >= 0) {
+      // Add subsequent pages
+      while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, undefined, 'FAST');
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
         heightLeft -= pdfHeight;
       }
 
@@ -288,29 +289,24 @@ export default function App() {
       const fileName = `AUDITORIA_${safeUnitName}_${date}.pdf`;
 
       if (action === 'share' && navigator.share) {
-        try {
-          const pdfBlob = pdf.output('blob');
-          const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-          
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: 'Relatório de Auditoria - Hora do Pastel',
-              text: `Segue relatório da unidade ${unitName}`,
-            });
-          } else {
-            pdf.save(fileName);
-          }
-        } catch (shareErr) {
-          console.error('Share error:', shareErr);
-          pdf.save(fileName); // Fallback to download if share fails
+        const pdfBlob = pdf.output('blob');
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Relatório de Auditoria',
+            text: `Relatório da unidade ${unitName}`,
+          });
+        } else {
+          pdf.save(fileName);
         }
       } else {
         pdf.save(fileName);
       }
     } catch (err) {
-      console.error('PDF Generation Error:', err);
-      alert('Erro ao processar as fotos do PDF. Tente reduzir o número de fotos ou baixar novamente pelo histórico.');
+      console.error('PDF Error:', err);
+      alert('Erro ao gerar o PDF. Tente novamente ou reduza o número de fotos.');
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -760,8 +756,8 @@ export default function App() {
       </main>
 
       {/* Hidden Report for PDF Generation - Optimized for Mobile Capture */}
-      <div style={{ position: 'fixed', top: '0', left: '0', width: '800px', zIndex: -100, opacity: 0.01, pointerEvents: 'none' }}>
-        <div id="report-container" className="bg-white p-10 text-stone-900 font-sans">
+      <div style={{ position: 'absolute', top: '0', left: '-9999px', width: '800px', visibility: 'hidden' }}>
+        <div id="report-container" className="bg-white p-10 text-stone-900 font-sans" style={{ width: '800px' }}>
           {/* Header */}
           <div className="flex justify-between items-center border-b-8 border-[#FF6B00] pb-6 mb-8">
             <div>
