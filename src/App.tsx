@@ -23,13 +23,9 @@ import { twMerge } from 'tailwind-merge';
 import jsPDF from 'jspdf';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://zncxgpcqubsqrfqxmhhx.supabase.co";
-const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY || "sb_publishable_O4Ozf7bprRosDluP37mAiA_ShAlr-m0";
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "sbp_9b493583c71b551b55f72b573ebe801c32ff16fc";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Cliente Supabase com chave service_role (para operações administrativas - contorna RLS)
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -337,14 +333,14 @@ export default function App() {
       }
       console.log('✅ [DELETE] Registro encontrado:', recordExists.unit_name);
 
-      // Passo 2: Excluir o registro usando SUPABASE ADMIN (contorna RLS!)
-      console.log('🗑️ [DELETE] Executando DELETE com permissões ADMIN...');
-      const { error: deleteError } = await supabaseAdmin
+      // Passo 2: Excluir o registro
+      console.log('🗑️ [DELETE] Executando DELETE...');
+      const { error: deleteError } = await supabase
         .from('submissions')
         .delete()
         .eq('id', idToDelete);
 
-      console.log('🗑️ [DELETE] Resultado DELETE (ADMIN):', deleteError);
+      console.log('🗑️ [DELETE] Resultado DELETE:', deleteError);
 
       if (deleteError) {
         console.error('❌ [DELETE] Erro ao excluir:', deleteError);
