@@ -559,20 +559,42 @@ export default function App() {
             {/* Footer Actions */}
             <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-6 md:pt-10 pb-16 md:pb-20">
               <button 
-                onClick={() => setStep('info')}
-                className="w-full md:flex-1 py-4 md:py-5 bg-white border border-stone-200 text-stone-600 font-bold rounded-xl md:rounded-[24px] hover:bg-stone-50 transition-all text-sm md:text-base"
+                onClick={() => {
+                  if (currentSectionIndex > 0) {
+                    setCurrentSectionIndex(i => i - 1);
+                    window.scrollTo(0, 0);
+                  } else {
+                    setStep('info');
+                  }
+                }}
+                className="w-full md:flex-1 py-4 md:py-5 bg-white border border-stone-200 text-stone-600 font-bold rounded-xl md:rounded-[24px] hover:bg-stone-50 transition-all text-sm md:text-base flex items-center justify-center gap-2"
               >
-                Voltar aos Dados
+                <ChevronLeft size={18} />
+                {currentSectionIndex > 0 ? 'Etapa Anterior' : 'Voltar aos Dados'}
               </button>
-              <button 
-                onClick={saveSubmission}
-                disabled={isSaving || answeredItemsCount < totalItemsCount}
-                className="w-full md:flex-[2] py-4 md:py-5 bg-[#FF6B00] text-white font-black rounded-xl md:rounded-[24px] hover:bg-orange-600 transition-all shadow-xl shadow-orange-200 flex items-center justify-center gap-2 md:gap-3 disabled:opacity-20 disabled:grayscale text-sm md:text-base"
-              >
-                {isSaving ? <Loader2 className="animate-spin" /> : <Save size={20} className="md:hidden" />}
-                {isSaving ? null : <Save size={22} className="hidden md:block" />}
-                FINALIZAR AUDITORIA
-              </button>
+
+              {currentSectionIndex < CHECKLIST_DATA.length - 1 ? (
+                <button 
+                  onClick={() => {
+                    setCurrentSectionIndex(i => i + 1);
+                    window.scrollTo(0, 0);
+                  }}
+                  className="w-full md:flex-[2] py-4 md:py-5 bg-[#1A1A1A] text-white font-black rounded-xl md:rounded-[24px] hover:bg-stone-800 transition-all shadow-xl shadow-stone-200 flex items-center justify-center gap-2 md:gap-3 text-sm md:text-base"
+                >
+                  PRÓXIMA ETAPA
+                  <ChevronRight size={22} />
+                </button>
+              ) : (
+                <button 
+                  onClick={saveSubmission}
+                  disabled={isSaving || answeredItemsCount < totalItemsCount}
+                  className="w-full md:flex-[2] py-4 md:py-5 bg-[#FF6B00] text-white font-black rounded-xl md:rounded-[24px] hover:bg-orange-600 transition-all shadow-xl shadow-orange-200 flex items-center justify-center gap-2 md:gap-3 disabled:opacity-20 disabled:grayscale text-sm md:text-base"
+                >
+                  {isSaving ? <Loader2 className="animate-spin" /> : <Save size={20} className="md:hidden" />}
+                  {isSaving ? null : <Save size={22} className="hidden md:block" />}
+                  FINALIZAR AUDITORIA
+                </button>
+              )}
             </div>
           </div>
         )}
