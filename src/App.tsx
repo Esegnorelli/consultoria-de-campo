@@ -25,7 +25,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://zncxgpcqubsqrfqxmhhx.supabase.co";
 const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY || "sb_publishable_O4Ozf7bprRosDluP37mAiA_ShAlr-m0";
-const supabaseServiceKey = import.meta.env.SUPABASE_SERVICE_ROLE_KEY || "sbp_9b493583c71b551b55f72b573ebe801c32ff16fc";
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "sbp_9b493583c71b551b55f72b573ebe801c32ff16fc";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Cliente Supabase com chave service_role (para operações administrativas - contorna RLS)
