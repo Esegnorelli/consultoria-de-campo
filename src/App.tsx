@@ -133,26 +133,25 @@ export default function App() {
 
     setIsSaving(true);
     try {
-      const response = await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          unit_name: unitName,
-          inspector_name: inspectorName,
-          date,
-          score,
-          data: results
-        })
-      });
+      const newSubmission = {
+        id: Date.now(),
+        unit_name: unitName,
+        inspector_name: inspectorName,
+        date,
+        score,
+        data: results
+      };
 
-      if (response.ok) {
-        setShowSuccess(true);
-        fetchSubmissions();
-        setTimeout(() => {
-          setShowSuccess(false);
-          setStep('history');
-        }, 2000);
-      }
+      const existingSubmissions = JSON.parse(localStorage.getItem('checklist_submissions') || '[]');
+      const updatedSubmissions = [newSubmission, ...existingSubmissions];
+      localStorage.setItem('checklist_submissions', JSON.stringify(updatedSubmissions));
+
+      setShowSuccess(true);
+      fetchSubmissions();
+      setTimeout(() => {
+        setShowSuccess(false);
+        setStep('history');
+      }, 2000);
     } catch (error) {
       console.error(error);
       alert('Erro ao salvar checklist.');
@@ -163,8 +162,7 @@ export default function App() {
 
   const fetchSubmissions = async () => {
     try {
-      const response = await fetch('/api/submissions');
-      const data = await response.json();
+      const data = JSON.parse(localStorage.getItem('checklist_submissions') || '[]');
       setSubmissions(data);
     } catch (error) {
       console.error(error);
