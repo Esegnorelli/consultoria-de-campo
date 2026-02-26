@@ -202,10 +202,16 @@ export default function App() {
 
       setShowSuccess(true);
       fetchSubmissions();
+      
+      // Auto-generate PDF after a short delay to ensure state is settled
+      setTimeout(() => {
+        generatePDF();
+      }, 1000);
+
       setTimeout(() => {
         setShowSuccess(false);
         setStep('history');
-      }, 2000);
+      }, 4000);
     } catch (error) {
       console.error('Save error:', error);
       alert('Erro ao salvar checklist. O armazenamento pode estar cheio ou indisponível.');
@@ -232,29 +238,29 @@ export default function App() {
   };
 
   const generatePDF = async () => {
-    if (!reportRef.current) {
-      console.error('Report reference not found');
+    const reportElement = document.getElementById('report-container');
+    if (!reportElement) {
+      console.error('Report element not found');
       return;
     }
     
     setIsGeneratingPDF(true);
-    console.log('Starting PDF generation...');
-
+    
     try {
-      // Give a small delay to ensure the DOM is updated with the latest state
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Ensure images are loaded
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 1, // Minimum scale for maximum compatibility on mobile
+      const canvas = await html2canvas(reportElement, {
+        scale: 1,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 800, // Match the container width
-        imageTimeout: 30000, // Even more time for images
+        windowWidth: 800,
+        imageTimeout: 40000,
+        removeContainer: true,
       });
       
-      console.log('Canvas captured successfully');
-      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const imgData = canvas.toDataURL('image/jpeg', 0.7);
       const pdf = new jsPDF('p', 'mm', 'a4');
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -265,11 +271,9 @@ export default function App() {
       let heightLeft = imgHeight;
       let position = 0;
 
-      // First page
       pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
       heightLeft -= pdfHeight;
 
-      // Subsequent pages if the content is longer than one A4 page
       while (heightLeft >= 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
@@ -277,11 +281,10 @@ export default function App() {
         heightLeft -= pdfHeight;
       }
 
-      pdf.save(`Checklist_${unitName || 'Auditoria'}_${date}.pdf`);
-      console.log('PDF saved successfully');
+      pdf.save(`AUDITORIA_${unitName.toUpperCase().replace(/\s+/g, '_')}_${date}.pdf`);
     } catch (err) {
-      console.error('Error generating PDF:', err);
-      alert('Erro ao gerar o PDF. Por favor, tente novamente.');
+      console.error('PDF Error:', err);
+      alert('Houve um problema ao gerar o PDF. Tente baixar novamente pelo histórico.');
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -689,66 +692,88 @@ export default function App() {
         )}
       </main>
 
-      {/* Hidden Report for PDF Generation */}
-      <div className="absolute opacity-0 pointer-events-none top-0 left-0 overflow-hidden" style={{ zIndex: -1 }}>
-        <div ref={reportRef} id="report-container" className="w-[800px] bg-white p-12 text-stone-900 font-sans">
-          <div className="flex justify-between items-start border-b-4 border-[#FF6B00] pb-8 mb-10">
+      {/* Hidden Report for PDF Generation - Optimized for Mobile Capture */}
+      <div style={{ position: 'absolute', top: '-9999px', left: '0', width: '800px' }}>
+        <div id="report-container" className="bg-white p-10 text-stone-900 font-sans">
+          {/* Header */}
+          <div className="flex justify-between items-center border-b-8 border-[#FF6B00] pb-6 mb-8">
             <div>
               <h1 className="text-4xl font-black text-[#FF6B00] tracking-tighter">HORA DO PASTEL</h1>
-              <p className="text-sm font-black text-stone-400 uppercase tracking-[0.3em] mt-1">Relatório de Auditoria Operacional</p>
+              <p className="text-sm font-bold text-stone-500 uppercase tracking-[0.2em]">Relatório Técnico de Auditoria Operacional</p>
             </div>
-            <div className="text-right">
-              <div className={cn(
-                "inline-block px-6 py-3 rounded-2xl font-black text-3xl mb-2",
-                score >= 8 ? "bg-emerald-50 text-emerald-600" : score >= 5 ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
-              )}>
-                {score.toFixed(1)} <span className="text-sm opacity-50">/ 10</span>
+            <div className="bg-stone-100 p-4 rounded-2xl text-center min-w-[120px]">
+              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Score Final</p>
+              <p className={cn(
+                "text-3xl font-black",
+                score >= 8 ? "text-emerald-600" : score >= 5 ? "text-amber-600" : "text-rose-600"
+              )}>{score.toFixed(1)}</p>
+            </div>
+          </div>
+
+          {/* Info Grid */}
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="border-2 border-stone-100 p-4 rounded-2xl">
+              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Unidade Auditada</p>
+              <p className="text-lg font-bold text-stone-800">{unitName || 'N/A'}</p>
+            </div>
+            <div className="border-2 border-stone-100 p-4 rounded-2xl">
+              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Data da Auditoria</p>
+              <p className="text-lg font-bold text-stone-800">{new Date(date).toLocaleDateString('pt-BR')}</p>
+            </div>
+            <div className="border-2 border-stone-100 p-4 rounded-2xl">
+              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Auditor Responsável</p>
+              <p className="text-lg font-bold text-stone-800">{inspectorName || 'N/A'}</p>
+            </div>
+            <div className="border-2 border-stone-100 p-4 rounded-2xl">
+              <p className="text-[10px] font-black text-stone-400 uppercase mb-1">Status Geral</p>
+              <p className={cn(
+                "text-lg font-bold",
+                score >= 8 ? "text-emerald-600" : "text-rose-600"
+              )}>{score >= 8 ? 'APROVADO' : 'NECESSITA ATENÇÃO'}</p>
+            </div>
+          </div>
+
+          {/* Checklist Sections */}
+          {CHECKLIST_DATA.map((section, sIdx) => (
+            <div key={sIdx} className="mb-10">
+              <div className="bg-[#1A1A1A] text-white px-6 py-3 rounded-xl mb-6 flex justify-between items-center">
+                <h2 className="text-sm font-black uppercase tracking-widest">{section.title}</h2>
               </div>
-              <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">{new Date().toLocaleDateString('pt-BR')}</p>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-10 mb-12">
-            <div className="bg-stone-50 p-6 rounded-3xl">
-              <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Unidade Auditada</p>
-              <p className="text-xl font-black text-stone-800">{unitName}</p>
-            </div>
-            <div className="bg-stone-50 p-6 rounded-3xl">
-              <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Auditor Responsável</p>
-              <p className="text-xl font-black text-stone-800">{inspectorName}</p>
-            </div>
-          </div>
-
-          {CHECKLIST_DATA.map(section => (
-            <div key={section.title} className="mb-10">
-              <h2 className="text-sm font-black mb-6 text-stone-400 uppercase tracking-[0.4em] border-b border-stone-100 pb-2">{section.title}</h2>
-              <div className="space-y-6">
-                {section.items.map(item => {
+              <div className="space-y-8">
+                {section.items.map((item, iIdx) => {
                   const res = results[item.id];
                   if (!res) return null;
                   return (
-                    <div key={item.id} className="pb-6 border-b border-stone-50 last:border-0">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex-1 pr-10">
-                          <p className="font-bold text-stone-800"><span className="text-orange-500 mr-3 font-black">{item.id}</span> {item.question}</p>
+                    <div key={iIdx} className="border-b border-stone-100 pb-8 last:border-0">
+                      <div className="flex justify-between items-start gap-6 mb-4">
+                        <div className="flex-1">
+                          <p className="text-base font-bold text-stone-800">
+                            <span className="text-orange-500 mr-2">#{item.id}</span>
+                            {item.question}
+                          </p>
                         </div>
-                        <span className={cn(
-                          "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest",
+                        <div className={cn(
+                          "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest shrink-0",
                           res.status === 'conforme' ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
                         )}>
                           {res.status === 'conforme' ? 'Conforme' : 'Não Conforme'}
-                        </span>
+                        </div>
                       </div>
+
                       {res.observation && (
-                        <div className="bg-stone-50 p-4 rounded-2xl mb-4">
-                          <p className="text-xs text-stone-500 font-bold uppercase tracking-widest mb-1">Observação:</p>
-                          <p className="text-sm text-stone-700 leading-relaxed italic">"{res.observation}"</p>
+                        <div className="bg-amber-50/50 border-l-4 border-amber-200 p-4 rounded-r-xl mb-4">
+                          <p className="text-[9px] font-black text-amber-500 uppercase mb-1">Observações do Auditor</p>
+                          <p className="text-sm text-stone-700 italic">"{res.observation}"</p>
                         </div>
                       )}
+
                       {res.photos.length > 0 && (
-                        <div className="flex gap-3">
-                          {res.photos.map((p, i) => (
-                            <img key={i} src={p} className="w-40 h-40 object-cover rounded-2xl border-2 border-stone-100 shadow-sm" />
+                        <div className="grid grid-cols-3 gap-3">
+                          {res.photos.map((photo, pIdx) => (
+                            <div key={pIdx} className="aspect-square rounded-xl overflow-hidden border-2 border-stone-100">
+                              <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
+                            </div>
                           ))}
                         </div>
                       )}
@@ -759,8 +784,10 @@ export default function App() {
             </div>
           ))}
 
+          {/* Footer */}
           <div className="mt-20 pt-10 border-t-2 border-stone-100 text-center">
-            <p className="text-[10px] font-black text-stone-300 uppercase tracking-[0.5em]">Documento Oficial Hora do Pastel • Auditoria Interna</p>
+            <p className="text-[10px] font-black text-stone-300 uppercase tracking-[0.5em] mb-2">Relatório Gerado Eletronicamente via Sistema de Auditoria Hora do Pastel</p>
+            <p className="text-[8px] text-stone-300">ID do Documento: {Date.now()}</p>
           </div>
         </div>
       </div>
