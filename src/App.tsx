@@ -224,8 +224,20 @@ export default function App() {
     setIsGeneratingPDF(true);
     
     try {
-      // Small delay to ensure rendering is complete
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Helper to wait for all images to load
+      const images = Array.from(reportElement.getElementsByTagName('img'));
+      const imagePromises = images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve; // Continue even if one image fails
+        });
+      });
+
+      // Wait for all images to be ready
+      await Promise.all(imagePromises);
+      // Extra tick for layout stabilization
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const canvas = await html2canvas(reportElement, {
         scale: 1,
@@ -234,6 +246,7 @@ export default function App() {
         backgroundColor: '#ffffff',
         width: 800,
         height: reportElement.offsetHeight,
+        imageTimeout: 60000,
         onclone: (clonedDoc) => {
           const el = clonedDoc.getElementById('report-container');
           if (el) {
@@ -257,14 +270,14 @@ export default function App() {
       let position = 0;
 
       // Add first page
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, undefined, 'FAST');
       heightLeft -= pdfHeight;
 
       // Add subsequent pages
       while (heightLeft > 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight, undefined, 'FAST');
         heightLeft -= pdfHeight;
       }
 
@@ -552,7 +565,7 @@ export default function App() {
                         <div className="flex gap-2">
                           {results[item.id]?.photos?.map((photo, idx) => (
                             <div key={idx} className="relative w-14 h-14 md:w-16 md:h-16 rounded-lg md:rounded-xl overflow-hidden border border-stone-200 group/photo">
-                              <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
+                              <img src={photo} alt="Evidência" className="w-full h-full object-cover" loading="lazy" />
                               <button 
                                 onClick={() => removePhoto(item.id, idx)}
                                 className="absolute inset-0 bg-rose-500/80 text-white flex items-center justify-center opacity-0 group-hover/photo:opacity-100 transition-opacity"
@@ -828,7 +841,7 @@ export default function App() {
                               <div className="grid grid-cols-3 gap-3">
                                 {res.photos.map((photo, pIdx) => (
                                   <div key={pIdx} className="aspect-square rounded-xl overflow-hidden border-2 border-stone-100">
-                                    <img src={photo} alt="Evidência" className="w-full h-full object-cover" />
+                                    <img src={photo} alt="Evidência" className="w-full h-full object-cover" loading="lazy" />
                                   </div>
                                 ))}
                               </div>
