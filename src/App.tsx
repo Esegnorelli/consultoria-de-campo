@@ -12,7 +12,8 @@ import {
   Plus,
   Loader2,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Share2
 } from 'lucide-react';
 import { CHECKLIST_DATA } from './constants';
 import { clsx, type ClassValue } from 'clsx';
@@ -203,15 +204,8 @@ export default function App() {
       setShowSuccess(true);
       fetchSubmissions();
       
-      // Auto-generate PDF after a short delay to ensure state is settled
-      setTimeout(() => {
-        generatePDF();
-      }, 1000);
-
-      setTimeout(() => {
-        setShowSuccess(false);
-        setStep('history');
-      }, 4000);
+      // We removed the auto-download here to let the user choose in the success screen
+      // but we keep the success screen open until they decide or close it.
     } catch (error) {
       console.error('Save error:', error);
       alert('Erro ao salvar checklist. O armazenamento pode estar cheio ou indisponível.');
@@ -237,7 +231,7 @@ export default function App() {
     }
   };
 
-  const generatePDF = async () => {
+  const generatePDF = async (action: 'download' | 'share' = 'download') => {
     const reportElement = document.getElementById('report-container');
     if (!reportElement) {
       console.error('Report element not found');
@@ -281,7 +275,24 @@ export default function App() {
         heightLeft -= pdfHeight;
       }
 
-      pdf.save(`AUDITORIA_${unitName.toUpperCase().replace(/\s+/g, '_')}_${date}.pdf`);
+      const fileName = `AUDITORIA_${unitName.toUpperCase().replace(/\s+/g, '_')}_${date}.pdf`;
+
+      if (action === 'share' && navigator.share) {
+        const pdfBlob = pdf.output('blob');
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Relatório de Auditoria - Hora do Pastel',
+            text: `Segue relatório da unidade ${unitName}`,
+          });
+        } else {
+          pdf.save(fileName);
+        }
+      } else {
+        pdf.save(fileName);
+      }
     } catch (err) {
       console.error('PDF Error:', err);
       alert('Houve um problema ao gerar o PDF. Tente baixar novamente pelo histórico.');
@@ -372,7 +383,32 @@ export default function App() {
                 <CheckCircle2 size={48} className="text-white hidden md:block" />
               </div>
               <h2 className="text-xl md:text-2xl font-black text-stone-900 mb-2">Sucesso!</h2>
-              <p className="text-sm md:text-base text-stone-500 font-medium">Auditoria salva e sincronizada localmente.</p>
+              <p className="text-sm md:text-base text-stone-500 font-medium mb-6">Auditoria salva e sincronizada localmente.</p>
+              
+              <div className="space-y-3">
+                <button 
+                  onClick={() => generatePDF('share')}
+                  disabled={isGeneratingPDF}
+                  className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 disabled:opacity-50"
+                >
+                  {isGeneratingPDF ? <Loader2 className="animate-spin" /> : <Share2 size={20} />}
+                  COMPARTILHAR PDF
+                </button>
+                <button 
+                  onClick={() => generatePDF('download')}
+                  disabled={isGeneratingPDF}
+                  className="w-full py-4 bg-orange-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-orange-100 disabled:opacity-50"
+                >
+                  {isGeneratingPDF ? <Loader2 className="animate-spin" /> : <Download size={20} />}
+                  BAIXAR PDF
+                </button>
+                <button 
+                  onClick={() => { setShowSuccess(false); setStep('history'); }}
+                  className="w-full py-4 bg-stone-100 text-stone-600 font-bold rounded-2xl"
+                >
+                  Ir para o Histórico
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -663,27 +699,43 @@ export default function App() {
                       </div>
                     </div>
                     
-                    <button 
-                      onClick={() => {
-                        setUnitName(sub.unit_name);
-                        setInspectorName(sub.inspector_name);
-                        setDate(sub.date);
-                        setResults(sub.data);
-                        generatePDF();
-                      }}
-                      disabled={isGeneratingPDF}
-                      className="w-full md:w-auto flex items-center justify-center gap-2 md:gap-3 px-5 py-3.5 md:px-6 md:py-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-orange-500 hover:text-white transition-all group/btn disabled:opacity-50"
-                    >
-                      {isGeneratingPDF ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : (
-                        <>
-                          <Download size={16} className="md:hidden" />
-                          <Download size={18} className="hidden md:block group-hover/btn:animate-bounce" />
-                        </>
-                      )}
-                      {isGeneratingPDF ? 'GERANDO...' : 'DOWNLOAD PDF'}
-                    </button>
+                    <div className="flex gap-2 w-full md:w-auto">
+                      <button 
+                        onClick={() => {
+                          setUnitName(sub.unit_name);
+                          setInspectorName(sub.inspector_name);
+                          setDate(sub.date);
+                          setResults(sub.data);
+                          generatePDF('download');
+                        }}
+                        disabled={isGeneratingPDF}
+                        className="flex-1 md:flex-none flex items-center justify-center gap-2 md:gap-3 px-5 py-3.5 md:px-6 md:py-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-orange-500 hover:text-white transition-all group/btn disabled:opacity-50"
+                      >
+                        {isGeneratingPDF ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <>
+                            <Download size={16} className="md:hidden" />
+                            <Download size={18} className="hidden md:block group-hover/btn:animate-bounce" />
+                          </>
+                        )}
+                        {isGeneratingPDF ? 'GERANDO...' : 'PDF'}
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setUnitName(sub.unit_name);
+                          setInspectorName(sub.inspector_name);
+                          setDate(sub.date);
+                          setResults(sub.data);
+                          generatePDF('share');
+                        }}
+                        disabled={isGeneratingPDF}
+                        className="flex items-center justify-center p-3.5 md:p-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50"
+                        title="Compartilhar"
+                      >
+                        <Share2 size={18} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
