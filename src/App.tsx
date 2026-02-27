@@ -17,7 +17,7 @@ import {
   Edit,
   X as XIcon
 } from 'lucide-react';
-import { CHECKLIST_DATA } from './constants';
+import { CHECKLIST_DATA, STORES } from './constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import jsPDF from 'jspdf';
@@ -167,6 +167,11 @@ export default function App() {
     const conformeItems = Object.values(results).filter((r: ItemResult) => r.status === 'conforme').length;
     return totalItemsCount > 0 ? (conformeItems / totalItemsCount) * 10 : 0;
   }, [results, totalItemsCount]);
+
+  const isAllItemsAnswered = (submissionData: any) => {
+    const answeredItems = Object.values(submissionData || {}).filter((r: any) => r.status !== null).length;
+    return answeredItems === totalItemsCount;
+  };
 
   const saveSubmission = async () => {
     if (!unitName || !inspectorName) {
@@ -830,30 +835,33 @@ export default function App() {
                 {editingSubmissionId ? 'Auditoria atualizada com sucesso!' : 'Auditoria salva e sincronizada localmente.'}
               </p>
 
-              <div className="space-y-3">
-                <button
-                  onClick={() => generatePDF('share')}
-                  disabled={isGeneratingPDF}
-                  className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 disabled:opacity-50"
-                >
-                  {isGeneratingPDF ? <Loader2 className="animate-spin" /> : <Share2 size={20} />}
-                  COMPARTILHAR PDF
-                </button>
-                <button
-                  onClick={() => generatePDF('download')}
-                  disabled={isGeneratingPDF}
-                  className="w-full py-4 bg-orange-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-orange-100 disabled:opacity-50"
-                >
-                  {isGeneratingPDF ? <Loader2 className="animate-spin" /> : <Download size={20} />}
-                  BAIXAR PDF
-                </button>
-                <button
-                  onClick={() => { setShowSuccess(false); setStep('history'); }}
-                  className="w-full py-4 bg-stone-100 text-stone-600 font-bold rounded-2xl"
-                >
-                  Ir para o Historico
-                </button>
-              </div>
+              {answeredItemsCount === totalItemsCount && (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => generatePDF('share')}
+                    disabled={isGeneratingPDF}
+                    className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-100 disabled:opacity-50"
+                  >
+                    {isGeneratingPDF ? <Loader2 className="animate-spin" /> : <Share2 size={20} />}
+                    COMPARTILHAR PDF
+                  </button>
+                  <button
+                    onClick={() => generatePDF('download')}
+                    disabled={isGeneratingPDF}
+                    className="w-full py-4 bg-orange-500 text-white font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-orange-100 disabled:opacity-50"
+                  >
+                    {isGeneratingPDF ? <Loader2 className="animate-spin" /> : <Download size={20} />}
+                    BAIXAR PDF
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={() => { setShowSuccess(false); setStep('history'); }}
+                className="w-full py-4 bg-stone-100 text-stone-600 font-bold rounded-2xl mt-3"
+              >
+                Ir para o Historico
+              </button>
             </div>
           </div>
         )}
@@ -873,13 +881,16 @@ export default function App() {
               <div className="space-y-5 md:space-y-6">
                 <div className="space-y-1.5 md:space-y-2">
                   <label className="text-[10px] md:text-xs font-bold text-stone-400 uppercase ml-1">Unidade Operacional</label>
-                  <input
-                    type="text"
+                  <select
                     value={unitName}
                     onChange={e => setUnitName(e.target.value)}
-                    placeholder="Ex: Unidade Shopping Central"
-                    className="w-full p-3.5 md:p-4 bg-stone-50 border border-stone-200 rounded-xl md:rounded-2xl focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 outline-none transition-all placeholder:text-stone-300 text-sm md:text-base"
-                  />
+                    className="w-full p-3.5 md:p-4 bg-stone-50 border border-stone-200 rounded-xl md:rounded-2xl focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 outline-none transition-all text-sm md:text-base appearance-none cursor-pointer"
+                  >
+                    <option value="" disabled selected>Selecione a loja</option>
+                    {STORES.map(store => (
+                      <option key={store} value={store}>{store}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-1.5 md:space-y-2">
@@ -1184,8 +1195,9 @@ export default function App() {
                           setResults(sub.data);
                           generatePDF('download');
                         }}
-                        disabled={isGeneratingPDF}
-                        className="flex-1 md:flex-none flex items-center justify-center gap-2 md:gap-3 px-5 py-3.5 md:px-6 md:py-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-orange-500 hover:text-white transition-all group/btn disabled:opacity-50"
+                        disabled={isGeneratingPDF || !isAllItemsAnswered(sub.data)}
+                        className="flex-1 md:flex-none flex items-center justify-center gap-2 md:gap-3 px-5 py-3.5 md:px-6 md:py-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs hover:bg-orange-500 hover:text-white transition-all group/btn disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={!isAllItemsAnswered(sub.data) ? 'Complete todos os itens antes de gerar PDF' : 'Baixar PDF'}
                       >
                         {isGeneratingPDF ? (
                           <Loader2 size={18} className="animate-spin" />
@@ -1222,9 +1234,9 @@ export default function App() {
                           setResults(sub.data);
                           generatePDF('share');
                         }}
-                        disabled={isGeneratingPDF}
-                        className="flex items-center justify-center p-3.5 md:p-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50"
-                        title="Compartilhar"
+                        disabled={isGeneratingPDF || !isAllItemsAnswered(sub.data)}
+                        className="flex items-center justify-center p-3.5 md:p-4 bg-stone-50 text-stone-600 rounded-xl md:rounded-2xl hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={!isAllItemsAnswered(sub.data) ? 'Complete todos os itens antes de compartilhar' : 'Compartilhar PDF'}
                       >
                         <Share2 size={18} />
                       </button>

@@ -8,6 +8,18 @@ export interface ChecklistSection {
   items: ChecklistItem[];
 }
 
+export const STORES = [
+  'Barra Shopping',
+  'Floresta',
+  'Protásio',
+  'Canoas',
+  'São Leopoldo',
+  'Novo Hamburgo',
+  'Caxias do Sul',
+  'Bento Gonçalves',
+  'República Ipiranga'
+];
+
 export const CHECKLIST_DATA: ChecklistSection[] = [
   {
     title: "1. LIMPEZA E ORGANIZAÇÃO",
