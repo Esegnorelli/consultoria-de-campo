@@ -1,20 +1,71 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Consultoria de Campo
 
-# Run and deploy your AI Studio app
+Sistema de auditoria e checklist para consultoria de campo.
 
-This contains everything you need to run your app locally.
+## Tecnologias
 
-View your app in AI Studio: https://ai.studio/apps/5991af0d-b877-4e22-aa56-fca47e32882f
+- **Frontend:** React + TypeScript + Vite + Tailwind CSS
+- **Backend:** Express + Node.js
+- **Banco de dados:** PostgreSQL
+- **Containerização:** Docker + Docker Compose
 
-## Run Locally
+## Funcionalidades
 
-**Prerequisites:**  Node.js
+- ✅ Criar auditorias/checklists
+- ✅ Listar histórico de auditorias
+- ✅ Editar registros existentes
+- ✅ Excluir registros
+- ✅ Gerar PDFs
 
+## Executar Localmente
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+**Pré-requisitos:** Node.js 20+ e Docker
+
+1. Clone o repositório:
+   ```bash
+   git clone https://github.com/Esegnorelli/consultoria-de-campo.git
+   cd consultoria-de-campo
+   ```
+
+2. Instale as dependências:
+   ```bash
+   npm install
+   ```
+
+3. Inicie o PostgreSQL com Docker:
+   ```bash
+   docker compose up -d postgres
+   ```
+
+4. Execute a aplicação:
+   ```bash
+   npm run dev
+   ```
+
+5. Acesse: http://localhost:3000
+
+## Docker
+
+Para executar tudo com Docker:
+
+```bash
+docker compose up -d
+```
+
+## Variáveis de Ambiente
+
+Crie um arquivo `.env` com:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/consultoria_campo
+# ou
+PG_HOST=localhost
+PG_PORT=5432
+PG_USER=postgres
+PG_PASSWORD=postgres
+PG_DATABASE=consultoria_campo
+```
+
+## Licença
+
+MIT
