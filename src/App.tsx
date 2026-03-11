@@ -21,11 +21,8 @@ import { CHECKLIST_DATA, STORES } from './constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import jsPDF from 'jspdf';
-import { createClient } from '@supabase/supabase-js';
+import { api } from './api';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -191,23 +188,10 @@ export default function App() {
 
       if (editingSubmissionId) {
         // Atualizar submission existente
-        const { error } = await supabase
-          .from('submissions')
-          .update(submissionData)
-          .eq('id', editingSubmissionId);
-
-        if (error) throw error;
+        await api.updateSubmission(editingSubmissionId, submissionData);
       } else {
         // Criar nova submission
-        const { data: insertedData, error } = await supabase
-          .from('submissions')
-          .insert([submissionData])
-          .select();
-
-        if (error) {
-          console.error('Supabase Error:', error);
-          throw new Error(error.message);
-        }
+        await api.createSubmission(submissionData);
       }
 
       setShowSuccess(true);
@@ -215,7 +199,7 @@ export default function App() {
       fetchSubmissions();
     } catch (error: any) {
       console.error('Save error:', error);
-      alert(`Erro ao salvar no Supabase: ${error.message || 'Verifique se a tabela "submissions" foi criada.'}`);
+      alert(`Erro ao salvar: ${error.message || 'Verifique se o PostgreSQL está rodando.'}`);
     } finally {
       setIsSaving(false);
     }
@@ -223,195 +207,43 @@ export default function App() {
 
   const fetchSubmissions = async () => {
     try {
-      console.log('📥 [FETCH] Buscando submissions do servidor...');
-      
-      const { data, error } = await supabase
-        .from('submissions')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      
-      console.log('📥 [FETCH] Submissions carregadas:', data?.length || 0, 'registros');
-      
-      if (data && data.length > 0) {
-        console.log('📥 [FETCH] Exemplo de registro:', {
-          id: data[0].id,
-          idType: typeof data[0].id,
-          idValue: String(data[0].id),
-          idIsUUID: typeof data[0].id === 'string' && data[0].id.includes('-'),
-          unit_name: data[0].unit_name,
-          created_at: data[0].created_at
-        });
-
-        // Verificar tipos de todos os IDs
-        const idTypes = new Set(data.map(s => typeof s.id));
-        console.log('📥 [FETCH] Tipos de ID encontrados:', Array.from(idTypes));
-      }
-      
-      setSubmissions(data || []);
+      console.log('📥 [FETCH] Buscando submissions...');
+      const data = await api.getSubmissions();
+      console.log('📥 [FETCH] Carregadas:', data.length, 'registros');
+      setSubmissions(data);
     } catch (error) {
-      console.error('❌ [FETCH] Erro ao buscar submissions:', error);
+      console.error('❌ [FETCH] Erro:', error);
     }
   };
 
   // Função para testar permissões do Supabase
-  const testSupabasePermissions = async () => {
-    console.log('🧪 [TEST] Iniciando teste de permissões...');
-    
+  const testDatabaseConnection = async () => {
     try {
-      // Test 1: SELECT
-      console.log('🧪 [TEST 1/3] Testando SELECT...');
-      const { data: selectData, error: selectError } = await supabase
-        .from('submissions')
-        .select('id, unit_name')
-        .limit(1);
-      
-      if (selectError) {
-        console.error('❌ [TEST 1/3] SELECT falhou:', selectError);
-        alert('❌ SELECT falhou: ' + selectError.message);
-        return;
-      }
-      console.log('✅ [TEST 1/3] SELECT OK');
-
-      // Test 2: INSERT (se houver dados)
-      if (selectData && selectData.length > 0) {
-        console.log('🧪 [TEST 2/3] Testando DELETE...');
-        
-        const { data: deleteData, error: deleteError } = await supabase
-          .from('submissions')
-          .delete()
-          .eq('id', selectData[0].id)
-          .select();
-
-        if (deleteError) {
-          console.error('❌ [TEST 2/3] DELETE falhou:', deleteError);
-          alert('❌ DELETE falhou: ' + deleteError.message + '\n\nExecute o arquivo setup_permissions.sql no SQL Editor do Supabase.');
-          return;
-        }
-        
-        console.log('✅ [TEST 2/3] DELETE OK', deleteData);
-
-        // Restaura o registro deletado (para não perder dados no teste)
-        if (deleteData && deleteData.length > 0) {
-          console.log('🧪 [TEST 3/3] Restaurando registro...');
-          await supabase
-            .from('submissions')
-            .insert(deleteData);
-          console.log('✅ [TEST 3/3] RESTORE OK');
-        }
-      } else {
-        console.log('⚠️ [TEST] Nenhum registro para testar DELETE');
-      }
-
-      alert('✅ Todos os testes de permissão passaram!\n\nSELECT: OK\nDELETE: OK\nRESTORE: OK');
-      
-      // Atualiza a lista
-      await fetchSubmissions();
-      
+      console.log('🧪 [TEST] Testando conexão...');
+      const data = await api.getSubmissions();
+      console.log('✅ [TEST] OK -', data.length, 'registros');
+      alert('✅ PostgreSQL conectado! ' + data.length + ' registros.');
     } catch (error: any) {
-      console.error('❌ [TEST] Erro no teste:', error);
-      alert('❌ Erro no teste: ' + error.message);
+      console.error('❌ [TEST] Erro:', error);
+      alert('❌ Erro de conexão: ' + error.message);
     }
   };
 
   const deleteSubmission = async (id: number | string) => {
     setIsDeleting(true);
     try {
-      console.log('🗑️ [DELETE] Iniciando exclusão do registro ID:', id, 'Tipo:', typeof id);
-
-      // Convert para string se for número, para garantir compatibilidade
-      const idToDelete = String(id);
-      console.log('🗑️ [DELETE] ID convertido para string:', idToDelete);
-
-      // Passo 1: Verificar se o registro existe ANTES de tentar excluir
-      console.log('🔍 [DELETE] Verificando se o registro existe...');
-      const { data: recordExists, error: checkError } = await supabase
-        .from('submissions')
-        .select('id, unit_name')
-        .eq('id', idToDelete)
-        .single();
-
-      if (checkError || !recordExists) {
-        console.error('❌ [DELETE] Registro não encontrado:', checkError);
-        throw new Error('Registro não encontrado ou erro ao verificar.');
-      }
-      console.log('✅ [DELETE] Registro encontrado:', recordExists.unit_name);
-
-      // Passo 2: Excluir o registro
-      console.log('🗑️ [DELETE] Executando DELETE...');
-      const { error: deleteError } = await supabase
-        .from('submissions')
-        .delete()
-        .eq('id', idToDelete);
-
-      console.log('🗑️ [DELETE] Resultado DELETE:', deleteError);
-
-      if (deleteError) {
-        console.error('❌ [DELETE] Erro ao excluir:', deleteError);
-        throw new Error(`Erro ao excluir: ${deleteError.message}`);
-      }
-
-      // Passo 3: Verificar se o registro foi REALMENTE excluído
-      console.log('🔍 [DELETE] Verificando se foi excluído...');
-      const { data: stillExists, error: verifyError } = await supabase
-        .from('submissions')
-        .select('id')
-        .eq('id', idToDelete)
-        .maybeSingle();
-
-      console.log('🔍 [DELETE] Resultado verificação:', { stillExists, verifyError });
-
-      if (stillExists) {
-        console.error('❌ [DELETE] O registro ainda existe após DELETE!');
-        console.error('❌ [DELETE] Isso indica problema com permissões RLS.');
-        throw new Error('O registro NÃO foi excluído. Mesmo com chave service_role, ainda não funcionou.');
-      }
-
-      console.log('✅ [DELETE] Registro excluído com sucesso! (verificado)');
-
-      // Passo 4: Atualiza a lista localmente primeiro para resposta mais rápida
-      console.log('🔄 [DELETE] Atualizando estado local...');
-      setSubmissions(prev => {
-        const filtered = prev.filter(sub => String(sub.id) !== idToDelete);
-        console.log('🔄 [DELETE] Registros restantes:', filtered.length);
-        return filtered;
-      });
-
-      // Passo 5: Depois busca do servidor para garantir sincronização
-      console.log('🔄 [DELETE] Buscando dados atualizados do servidor...');
-      await fetchSubmissions();
-
-      // Passo 6: Fecha o modal e mostra sucesso
+      const numId = typeof id === 'string' ? parseInt(id, 10) : id;
+      console.log('🗑️ [DELETE] Excluindo ID:', numId);
+      await api.deleteSubmission(numId);
+      console.log('✅ [DELETE] Excluído com sucesso');
+      setSubmissions(prev => prev.filter(s => s.id !== numId));
       setShowDeleteConfirm(null);
       alert('✅ Registro excluído com sucesso!');
-
     } catch (error: any) {
-      console.error('❌ [DELETE] Erro completo:', error);
-      console.error('❌ [DELETE] Detalhes do erro:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      });
-
-      let errorMessage = 'Erro ao excluir o registro.';
-      
-      // Mensagens mais específicas
-      if (error.message?.includes('permission denied') || error.message?.includes('insufficient privilege')) {
-        errorMessage = '❌ Erro de permissão: Você não tem permissão para excluir este registro.\n\nSolução: Execute no SQL Editor do Supabase:\nALTER TABLE submissions DISABLE ROW LEVEL SECURITY;';
-      } else if (error.message?.includes('row-level security policy')) {
-        errorMessage = '❌ Erro de política de segurança: A tabela submissions tem RLS habilitado.\n\nSolução: Execute no SQL Editor do Supabase:\nALTER TABLE submissions DISABLE ROW LEVEL SECURITY;';
-      } else if (error.message?.includes('NÃO foi excluído')) {
-        errorMessage = error.message;
-      } else if (error.message) {
-        errorMessage = `❌ Erro ao excluir: ${error.message}`;
-      }
-
-      alert(errorMessage);
+      console.error('❌ [DELETE] Erro:', error);
+      alert('❌ Erro ao excluir: ' + error.message);
     } finally {
       setIsDeleting(false);
-      console.log('🏁 [DELETE] Processo de exclusão finalizado');
     }
   };
 
@@ -442,12 +274,7 @@ export default function App() {
         data: results
       };
 
-      const { error } = await supabase
-        .from('submissions')
-        .update(updatedData)
-        .eq('id', editingSubmissionId);
-
-      if (error) throw error;
+      await api.updateSubmission(editingSubmissionId, updatedData);
 
       setShowSuccess(true);
       setEditingSubmissionId(null);
@@ -1140,7 +967,7 @@ export default function App() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={testSupabasePermissions}
+                  onClick={testDatabaseConnection}
                   className="w-full md:w-auto px-4 py-3.5 bg-amber-100 text-amber-700 rounded-xl md:rounded-2xl font-bold text-xs shadow-lg hover:bg-amber-200 transition-all"
                   title="Testar permissões do Supabase"
                 >
